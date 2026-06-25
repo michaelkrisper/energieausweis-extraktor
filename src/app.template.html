@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GBG · Energieausweis-Extraktor</title>
+<style>
+  :root{
+    --gbg-blue:#165f83;
+    --gbg-blue-light:#237ca8;
+    --gbg-blue-dark:#0f4660;
+    --ok:#2e7d32;
+    --warn:#b25b00;
+    --manuell:#a94442;
+    --bg:#f4f6f8;
+    --line:#d7dde2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:"Open Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#1d2b35;background:var(--bg);font-size:14px;
+  }
+  header{
+    background:var(--gbg-blue);color:#fff;padding:14px 22px;
+    display:flex;align-items:center;gap:16px;box-shadow:0 2px 6px rgba(0,0,0,.15);
+  }
+  header .logo{
+    font-weight:800;font-size:22px;letter-spacing:.5px;
+    background:#fff;color:var(--gbg-blue);padding:4px 10px;border-radius:4px;
+  }
+  header h1{font-size:17px;font-weight:600;margin:0}
+  header .sub{font-size:12px;opacity:.85;margin-top:2px}
+  main{padding:18px 22px 60px}
+  .bar{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;
+  }
+  button{
+    font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
+    border:none;border-radius:5px;padding:9px 16px;color:#fff;background:var(--gbg-blue);
+    transition:background .15s;
+  }
+  button:hover{background:var(--gbg-blue-dark)}
+  button.secondary{background:#fff;color:var(--gbg-blue);border:1px solid var(--gbg-blue)}
+  button.secondary:hover{background:#eef4f8}
+  button:disabled{background:#9bb3c0;cursor:not-allowed}
+  .filterbox input,.filterbox select{
+    font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;
+  }
+  .stats{margin-left:auto;display:flex;gap:14px;font-size:13px;align-items:center}
+  .pill{padding:3px 10px;border-radius:12px;font-weight:600}
+  .pill.ok{background:#e3f1e4;color:var(--ok)}
+  .pill.manuell{background:#f7e3e3;color:var(--manuell)}
+  .pill.total{background:#e4eef4;color:var(--gbg-blue)}
+  #progress{height:6px;background:#dde5ea;border-radius:3px;overflow:hidden;margin-bottom:14px;display:none}
+  #progress>div{height:100%;width:0;background:var(--gbg-blue-light);transition:width .2s}
+  .note{font-size:12.5px;color:#5a6b78;margin:6px 0 14px;line-height:1.5}
+  .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;max-height:calc(100vh - 250px)}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap}
+  thead th{
+    position:sticky;top:0;background:var(--gbg-blue);color:#fff;font-weight:600;
+    padding:8px 10px;text-align:left;border-right:1px solid rgba(255,255,255,.15);z-index:2;
+  }
+  thead th:first-child{position:sticky;left:0;z-index:3}
+  tbody td{padding:6px 10px;border-bottom:1px solid #eef1f4;border-right:1px solid #f1f4f6}
+  tbody td[contenteditable]:focus{outline:2px solid var(--gbg-blue-light);background:#fbfdff}
+  tbody tr:hover td{background:#f7fafc}
+  td.status{font-weight:700}
+  tr.s-ok td.status{color:var(--ok)}
+  tr.s-manuell td.status{color:var(--manuell)}
+  tr.s-manuell{background:#fdf6f6}
+  td.file{position:sticky;left:0;background:#fff;font-weight:600;color:var(--gbg-blue);max-width:240px;overflow:hidden;text-overflow:ellipsis}
+  tr:hover td.file{background:#f7fafc}
+  .empty{padding:50px;text-align:center;color:#7a8794}
+  code{background:#eef1f4;padding:1px 5px;border-radius:3px;font-size:12px}
+  .warnB{color:var(--manuell)}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">GBG</span>
+  <div>
+    <h1>Energieausweis-Extraktor</h1>
+    <div class="sub">PDF → Excel · läuft lokal im Browser · keine Daten verlassen den Rechner</div>
+  </div>
+</header>
+
+<main>
+  <div class="bar">
+    <button id="pick">📁 Ordner wählen</button>
+    <button id="export" class="secondary" disabled>⬇ Excel exportieren</button>
+    <div class="filterbox">
+      <input id="search" type="text" placeholder="Suche / Filter…" style="width:200px">
+      <select id="statusFilter">
+        <option value="">alle Status</option>
+        <option value="ok">nur OK</option>
+        <option value="manuell">nur manuell</option>
+      </select>
+    </div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div id="progress"><div></div></div>
+
+  <div class="note" id="hint">
+    <b>So geht's:</b> „Ordner wählen" → den Wurzelordner mit allen Energieausweis-PDFs auswählen
+    (Unterordner werden automatisch mitgelesen). Zellen sind direkt editierbar — korrigier was die
+    automatische Erkennung verfehlt, <b>dann</b> exportieren. Zeilen mit Status
+    <span class="warnB">manuell</span> = gescannt oder Format weicht zu stark ab → bitte von Hand prüfen.
+    <br>Browser: <b>Edge</b> oder Chrome (Firefox kann keine Ordner lesen).
+  </div>
+
+  <div class="tablewrap">
+    <table id="tbl">
+      <thead><tr id="head"></tr></thead>
+      <tbody id="rows"><tr><td class="empty" colspan="99">Noch keine Daten. Oben „Ordner wählen".</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- ===== eingebettete Bibliotheken (offline, kein CDN) ===== -->
+<!--__PDFJS__-->
+<!--__SHEETJS__-->
+<!--__PDFWORKER__-->
+
+<script>
+"use strict";
+
+// pdf.js Worker aus eingebettetem Blob (kein externer Pfad nötig)
+(function(){
+  var w = document.getElementById('pdfworker');
+  if (w && window.pdfjsLib){
+    var blob = new Blob([w.textContent], {type:'application/javascript'});
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }
+})();
+
+// ---- Spaltendefinition (Maximal-Satz, OIB Energieausweis Österreich) ----
+const COLUMNS = [
+  {key:'datei',          label:'Datei',                    edit:false},
+  {key:'status',         label:'Status',                   edit:false, cls:'status'},
+  {key:'adresse',        label:'Adresse / Objekt',         edit:true},
+  {key:'plz_ort',        label:'PLZ / Ort',                edit:true},
+  {key:'kg',             label:'Katastralgemeinde',        edit:true},
+  {key:'gstnr',          label:'Grundstücksnr',            edit:true},
+  {key:'kategorie',      label:'Gebäudekategorie',         edit:true},
+  {key:'baujahr',        label:'Baujahr',                  edit:true},
+  {key:'bgf',            label:'Brutto-Grundfläche m²',    edit:true},
+  {key:'bezugsflaeche',  label:'kond./Bezugsfläche m²',    edit:true},
+  {key:'hwb',            label:'HWB Ref kWh/m²a',          edit:true},
+  {key:'hwb_sk',         label:'HWB SK kWh/m²a',           edit:true},
+  {key:'hwb_klasse',     label:'HWB-Klasse',               edit:true},
+  {key:'peb',            label:'PEB kWh/m²a',              edit:true},
+  {key:'eeb',            label:'EEB kWh/m²a',              edit:true},
+  {key:'fgee',           label:'fGEE',                     edit:true},
+  {key:'co2',            label:'CO₂ kg/m²a',               edit:true},
+  {key:'energietraeger', label:'Energieträger',            edit:true},
+  {key:'ausstelldatum',  label:'Ausstelldatum',            edit:true},
+  {key:'gueltig_bis',    label:'Gültig bis',               edit:true},
+  {key:'aussteller',     label:'Aussteller',               edit:true},
+  {key:'pfad',           label:'Pfad',                     edit:false},
+];
+
+// ---- Feld-Patterns. Mehrere Aliasse pro Feld, da jeder Aussteller anders schreibt. ----
+// Reihenfolge = Priorität; erster Treffer gewinnt.
+const PATTERNS = {
+  adresse: [
+    // Separator (: oder -) zwingend, sonst matcht ein bloßes Überschriften-Wort „Gebäude"
+    /(?:Geb[äa]udeadresse|Objekt(?:adresse)?|Liegenschaft|Bauvorhaben|Standort|Anschrift|Adresse)\s*[:\-]\s*([A-ZÄÖÜ][^\n]{4,70})/i,
+  ],
+  plz_ort: [ /\b(\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-\/ ]{2,40})/ ],
+  kg: [
+    /Katastralgemeinde\s*(?:\(KG\))?\s*[:\-]?\s*([^\n]{2,45})/i,
+    /\bKG[\s.\-]{0,3}(\d{3,5}[^\n]{0,30})/i,
+  ],
+  gstnr: [
+    /Grundst[üu]cks?(?:nummer|nr)\.?\s*[:\-]?\s*([0-9][0-9\/.\- ]{0,18})/i,
+    /\bGst\.?[\s\-Nr.]{0,5}([0-9][0-9\/]{0,14})/i,
+  ],
+  kategorie: [ /(Wohngeb[äa]ude|Nichtwohngeb[äa]ude|B[üu]rogeb[äa]ude|Schule|Kindergarten|Krankenhaus|Hotel|Veranstaltungsst[äa]tte|Sportst[äa]tte)/i ],
+  baujahr: [ /(?:Baujahr|Errichtungsjahr|Bestand\s*seit|Baubewilligung)\s*[:\-]?\s*(?:[^0-9]{0,8})?((?:18|19|20)\d{2})/i ],
+  bgf: [
+    /Brutto[\-\s]?Grundfl[äa]che\s*(?:BGF)?\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
+    /\bBGF\b[^0-9]{0,8}([0-9][0-9.,]{1,9})/,
+  ],
+  bezugsflaeche: [
+    /konditionierte?\s*(?:Brutto[\-\s]?Grundfl[äa]che|Fl[äa]che|Nutzfl[äa]che)\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
+    /Bezugsfl[äa]che\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
+  ],
+  hwb: [
+    /HWB\s*Ref\s*[,.]?\s*RK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i,
+    /HWB\s*[,]?\s*RK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i,
+    /Heizw[äa]rmebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i,
+    /\bHWB\b[^0-9A-Za-z\-]{0,6}([0-9][0-9.,]{0,7})\s*kWh/i,
+  ],
+  hwb_sk: [ /HWB\s*[,]?\s*SK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i ],
+  hwb_klasse: [ /HWB[\s\-]*Klasse[^A-G]{0,8}([A-G][+]{0,2})/i, /Energieeffizienzklasse[^A-G]{0,8}([A-G][+]{0,2})/i ],
+  peb: [ /\bPEB\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,7})/i, /Prim[äa]renergiebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i ],
+  eeb: [ /\bEEB\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,7})/i, /Endenergiebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i ],
+  fgee: [ /\bfGEE\b[^0-9\-]{0,8}([0-9](?:[.,][0-9]{1,3})?)/i, /Gesamtenergieeffizienz[\-\s]?Faktor[^0-9\-]{0,10}([0-9](?:[.,][0-9]{1,3})?)/i ],
+  co2: [ /\bCO2\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,6})/i, /Kohlendioxid[^0-9\-]{0,14}([0-9][0-9.,]{0,6})/i ],
+  energietraeger: [ /(?:Energietr[äa]ger|W[äa]rmebereitstellung|Heizsystem|Heizung)\s*[:\-]?\s*([A-ZÄÖÜ][^\n]{3,40})/i ],
+  ausstelldatum: [ /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt\s*am|Datum\s*der\s*Ausstellung)\s*[:\-]?\s*(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i ],
+  gueltig_bis: [ /(?:G[üu]ltig\s*bis|G[üu]ltigkeit\s*bis|G[üu]ltig\s*bis\s*zum)\s*[:\-]?\s*(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i ],
+  aussteller: [
+    /(?:Aussteller(?:in)?|Ersteller(?:in)?|Planverfasser|erstellt\s*durch|Bearbeiter)\s*[:\-]?\s*([A-ZÄÖÜ][^\n]{3,50})/i,
+  ],
+};
+
+const NUM_FIELDS = new Set(['hwb','hwb_sk','peb','eeb','fgee','co2','bgf','bezugsflaeche']);
+
+function cleanNum(s){
+  // österr. Dezimal: '1.234,56' → '1234.56'; '12,3' → '12.3'
+  s = s.replace(/[^\d.,]/g,'');
+  if (s.indexOf(',')>-1){ s = s.replace(/\./g,'').replace(',', '.'); }
+  return s.replace(/\.(?=.*\.)/g,''); // mehrfach-Punkte tilgen
+}
+
+function extract(text){
+  // Normalisieren: Zeilenumbrüche behalten, Mehrfach-Spaces zu einem
+  const norm = text.replace(/­/g,'').replace(/[ \t]+/g,' ').replace(/\r/g,'');
+  const out = {};
+  for (const key in PATTERNS){
+    out[key] = '';
+    for (const re of PATTERNS[key]){
+      const m = norm.match(re);
+      if (m && m[1]){
+        let v = m[1].trim().replace(/\s{2,}/g,' ');
+        if (NUM_FIELDS.has(key)) v = cleanNum(v);
+        if (v){ out[key]=v; break; }
+      }
+    }
+  }
+  return out;
+}
+
+// ---- State ----
+let DATA = [];      // {row-object}
+let dirName = '';
+
+// ---- UI bauen ----
+const head = document.getElementById('head');
+COLUMNS.forEach(c=>{ const th=document.createElement('th'); th.textContent=c.label; head.appendChild(th); });
+
+function statusClass(s){ return s.startsWith('OK') ? 's-ok' : 's-manuell'; }
+
+function render(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const sf = document.getElementById('statusFilter').value;
+  const tb = document.getElementById('rows');
+  tb.innerHTML='';
+  let shown=0;
+  DATA.forEach((d,idx)=>{
+    const isManuell = d.status.toLowerCase().includes('manuell');
+    if (sf==='ok' && isManuell) return;
+    if (sf==='manuell' && !isManuell) return;
+    if (q){
+      const hay = COLUMNS.map(c=>String(d[c.key]||'')).join(' ').toLowerCase();
+      if (!hay.includes(q)) return;
+    }
+    shown++;
+    const tr=document.createElement('tr');
+    tr.className = statusClass(d.status);
+    COLUMNS.forEach(c=>{
+      const td=document.createElement('td');
+      if (c.cls) td.classList.add(c.cls);
+      if (c.key==='datei') td.classList.add('file');
+      td.textContent = d[c.key]||'';
+      if (c.edit){
+        td.contentEditable='true';
+        td.addEventListener('input',()=>{ DATA[idx][c.key]=td.textContent; });
+      }
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  if (!shown){
+    tb.innerHTML='<tr><td class="empty" colspan="99">'+(DATA.length?'Kein Treffer für Filter.':'Noch keine Daten.')+'</td></tr>';
+  }
+  updateStats();
+}
+
+function updateStats(){
+  const total=DATA.length;
+  const man=DATA.filter(d=>d.status.toLowerCase().includes('manuell')).length;
+  const ok=total-man;
+  document.getElementById('stats').innerHTML =
+    total ? '<span class="pill total">'+total+' PDFs</span><span class="pill ok">'+ok+' OK</span><span class="pill manuell">'+man+' manuell</span>' : '';
+  document.getElementById('export').disabled = total===0;
+}
+
+document.getElementById('search').addEventListener('input',render);
+document.getElementById('statusFilter').addEventListener('change',render);
+
+// ---- Ordner rekursiv einlesen ----
+async function* walk(dirHandle, prefix=''){
+  for await (const [name, handle] of dirHandle.entries()){
+    const path = prefix ? prefix+'/'+name : name;
+    if (handle.kind==='directory'){
+      yield* walk(handle, path);
+    } else if (name.toLowerCase().endsWith('.pdf')){
+      yield {handle, path};
+    }
+  }
+}
+
+async function pdfToText(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({data:buf, useWorkerFetch:false, isEvalSupported:false}).promise;
+  let text='';
+  const n = Math.min(doc.numPages, 12); // Energieausweise selten >12 Seiten
+  for (let p=1;p<=n;p++){
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    text += tc.items.map(i=>i.str).join(' ')+'\n';
+  }
+  await doc.destroy();
+  return {text, pages:doc.numPages};
+}
+
+const prog = document.getElementById('progress');
+const progBar = prog.firstElementChild;
+
+document.getElementById('pick').addEventListener('click', async ()=>{
+  if (!window.showDirectoryPicker){
+    alert('Dieser Browser kann keine Ordner lesen.\nBitte Microsoft Edge oder Google Chrome verwenden.');
+    return;
+  }
+  let dir;
+  try{ dir = await window.showDirectoryPicker(); }
+  catch(e){ return; } // abgebrochen
+  dirName = dir.name;
+
+  document.getElementById('hint').style.display='none';
+  document.getElementById('pick').disabled=true;
+  prog.style.display='block'; progBar.style.width='0%';
+
+  // erst alle PDFs sammeln (für Fortschritt)
+  const list=[];
+  for await (const f of walk(dir)) list.push(f);
+
+  DATA=[];
+  for (let i=0;i<list.length;i++){
+    const {handle, path} = list[i];
+    const row = {datei:handle.name, pfad:path, status:''};
+    try{
+      const file = await handle.getFile();
+      const {text, pages} = await pdfToText(file);
+      const charsPerPage = text.replace(/\s/g,'').length / Math.max(pages,1);
+      const fields = extract(text);
+      Object.assign(row, fields);
+
+      const coreMissing = !fields.hwb && !fields.fgee && !fields.peb;
+      if (charsPerPage < 60){
+        row.status = 'MANUELL · kein Text (Scan?)';
+      } else if (coreMissing){
+        row.status = 'MANUELL · Kennzahlen nicht gefunden';
+      } else {
+        const got = ['hwb','fgee','peb','eeb','co2'].filter(k=>fields[k]).length;
+        row.status = 'OK · '+got+'/5 Kennzahlen';
+      }
+    }catch(err){
+      row.status = 'MANUELL · Lesefehler ('+(err.message||err)+')';
+    }
+    DATA.push(row);
+    progBar.style.width = Math.round(((i+1)/list.length)*100)+'%';
+    if (i % 5 === 0) render(); // gelegentlich live-update
+  }
+
+  prog.style.display='none';
+  document.getElementById('pick').disabled=false;
+  render();
+  if (!list.length) alert('Keine PDF-Dateien in „'+dirName+'" gefunden.');
+});
+
+// ---- Excel-Export ----
+document.getElementById('export').addEventListener('click', ()=>{
+  const aoa = [ COLUMNS.map(c=>c.label) ];
+  DATA.forEach(d=> aoa.push(COLUMNS.map(c=>{
+    let v = d[c.key]||'';
+    if (NUM_FIELDS.has(c.key) && v!=='' && !isNaN(v)) return Number(v);
+    return v;
+  })));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = COLUMNS.map(c=>({wch: Math.max(10, c.label.length+2)}));
+  ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0},e:{r:DATA.length,c:COLUMNS.length-1}})};
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Energieausweise');
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'Energieausweise_'+(dirName||'export').replace(/[^\w\-]/g,'_')+'_'+stamp+'.xlsx');
+});
+</script>
+</body>
+</html>

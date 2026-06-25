@@ -1,0 +1,6 @@
+# nichts ausschließen, das den Offline-Build betrifft:
+# vendor/*.js und dist/index.html werden BEWUSST committet (reproduzierbar + sofort nutzbar).
+*.pyc
+__pycache__/
+.DS_Store
+*.xlsx
