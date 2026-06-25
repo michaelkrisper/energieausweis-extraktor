@@ -502,13 +502,17 @@ function extract(text){
     }
     return '';
   }
-  // Abkürzungs-Fallback (alte klassische Tabellen ohne dt. Langlabel)
-  function byAbbr(abbrRe, unit){
+  // Abkürzungs-Fallback (alte klassische Tabellen ohne dt. Langlabel). opt.last:
+  // bei mehreren Treffern den letzten nehmen (z.B. HTEB-Summenzeile). Wert auch
+  // in der Folgezeile (ETU stapelt Label und Wert).
+  function byAbbr(abbrRe, unit, opt){
+    opt = opt || {}; let found = '';
     for (let l=0;l<lines.length;l++){
       if (!abbrRe.test(lines[l])) continue;
-      const v = specOnLine(lines[l], unit); if (v!=='') return v;
+      const v = specOnLine(lines[l], unit) || specOnLine(lines[l+1]||'', unit);
+      if (v!==''){ if (!opt.last) return v; found = v; }
     }
-    return '';
+    return found;
   }
 
   // HWB: Hauptspalte = Heizwärmebedarf im Standortklima (realer Bedarf).
@@ -524,7 +528,7 @@ function extract(text){
   r.heb    = byAbbrAdjacent(/\bHEB\s*SK\b/i, {section:'SK'})
           || byGerman(/Heizenergiebedarf/i, {section:'SK', notSuffix:/Referenz/i, up:true})
           || byAbbr(/\bHEB\b/i);
-  r.hteb   = byAbbr(/\bHTEB(?:-?RH)?\b/i);
+  r.hteb   = byAbbr(/\bHTEB\b(?!\s*[-,]?\s*RH)/i, undefined, {last:true});
   r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i}) || byAbbr(/\bEEB\b(?!.*RK)/i);
   r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i});
   r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK'})
