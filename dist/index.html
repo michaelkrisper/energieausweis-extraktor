@@ -411,19 +411,28 @@ function extract(text){
                     : /\bWohngeb[äa]ude\b/i.test(text) ? 'Wohngebäude' : '');
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp/i, {max:60})
                      .replace(/\s*(Letzte Ver[äa]nderung|Baujahr|Letzte Ver).*$/i,'').trim();
+  if (!r.nutzungsprofil){
+    // manche Layouts stellen den Profil-Wert in die Zeile ÜBER das Label
+    for (let l=1;l<lines.length;l++){
+      if (/^Nutzungsprofil\b/i.test(lines[l].trim()) && /^[A-ZÄÖÜ][a-zäöüß]/.test(lines[l-1].trim())){
+        r.nutzungsprofil = cells(lines[l-1])[0].slice(0,60).trim(); break;
+      }
+    }
+  }
   r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr|Erbaut/i, {num:true})
                  || reText(text, /(?:Baujahr|Errichtungsjahr|Erbaut)\D{0,8}((?:18|19|20)\d{2})/i);
-  r.lueftung     = byLabel(lines, /Art der L[üu]ftung|L[üu]ftung\b/i, {max:28});
-  if (!r.lueftung || /Hüllfl|^\d/.test(r.lueftung))   // GEQ: Wert steht z.T. über dem Label
-    r.lueftung   = reText(text, /\b(RLT (?:mit|ohne) WRG|Fensterl[üu]ftung|kontrollierte? Wohnrauml[üu]ftung|mechanische L[üu]ftung)\b/i) || r.lueftung;
+  r.lueftung     = byLabel(lines, /Art der L[üu]ftung/i, {max:28});
+  if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) r.lueftung = byLabel(lines, /\bL[üu]ftung\b/i, {max:28});
+  if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) // Wert steht z.T. über/neben dem Label
+    r.lueftung   = reText(text, /\b(RLT (?:mit|ohne) WRG|Fensterl[üu]ftung|kontrollierte? Wohnrauml[üu]ftung|mechanische L[üu]ftung|nat[üu]rlich(?:e L[üu]ftung)?)\b/i) || r.lueftung;
   r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²'});
   r.bezugsflaeche= byLabel(lines, /Bezugs-?(?:fl[äa]che|Grundfl[äa]che)|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²', down:true});
   r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto[- ]?Volumen/i, {num:true, unit:'m³', down:true});
   r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m', up:true, down:true});
   r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true, unit:'1\\/m'});
   r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true, unit:'W\\/m', down:true});
-  r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:20})
-                   .replace(/\s*(mittlerer|Bauweise|Heiztage|Heizgradtage|Norm|Art der|Soll-|Photovoltaik).*$/i,'').trim();
+  r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:24})
+                   .replace(/\s*(mittlerer|Bauweise|Heiztage|Heizgradtage|Norm|Art der|Soll-|Photovoltaik|Solarthermie|Stromspeicher|EA-?Art|LEK).*$/i,'').trim();
   r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m'});
   r.heizgradtage = byLabel(lines, /Heizgradtage/i, {num:true, unit:'K'});
   r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C', down:true});
@@ -524,7 +533,16 @@ function extract(text){
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a');   // OCR: "CO," statt "CO2"
-  r.lek    = reText(text, /LEK\s*(?:T|\+;?)?\s*-?\s*Wert\D{0,15}(\d{1,3}(?:,\d+)?)/i);
+  // LEK: Wert auf der Label-Zeile (ggf. nach "T"-Subskript) ODER in der Folgezeile
+  // (ECOTECH "LEK-Wert" \n "… T  177,33"). Kein Zeilenübergriff im Hauptregex.
+  r.lek = '';
+  const LEKLBL = /LEK\s*(?:T|\+;?)?\s*-?\s*Wert/i;
+  for (let l=0;l<lines.length && !r.lek;l++){
+    if (!LEKLBL.test(lines[l])) continue;
+    let m = lines[l].match(/LEK\s*(?:T|\+;?)?\s*-?\s*Wert\s*[T:]?\s*(\d{1,3}(?:,\d+)?)\b/i);
+    if (!m) m = (lines[l+1]||'').match(/\bT\s+(\d{1,3},\d+)/);
+    if (m && m[1]!=='0' && m[1]!=='0,0') r.lek = m[1];
+  }
   const fg = text.replace(/[ \t]+/g,' ');
   // eawz/Vorarlberg-Layout: saubere Inserat-/Förderungs-Kennzahlen überschreiben
   // die unsicheren Stapel-Spalten. Greifen nur, wenn diese Labels vorkommen.
@@ -553,14 +571,14 @@ function extract(text){
       if (/:\s*Der\b/.test(lines[l])) continue;            // Erläuterungstext "fGEE: Der ..."
       if (section!=='any' && sec[l]!==section) continue;
       const blob = lines[l]+' '+(lines[l+1]||'');
-      const all = blob.match(/(?<![\d.,])[0-4],\d{1,3}(?!\d)/g);
+      const all = blob.match(/(?<![\d.,])[0-9],\d{1,3}(?!\d)/g);  // fGEE kann >4 sein (schlechte Bestände)
       if (!all) continue;
       // "0,900  0,817" (Anforderung + Ist) -> Ist = letzter Wert. Sonst einziger.
       return cleanNum(all[all.length-1]);
     }
     return '';
   }
-  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?([0-4],\d{1,3})/i)||[])[1] || '' ;
+  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?([0-9],\d{1,3})/i)||[])[1] || '' ;
   // ETU/Vatter-Layout: fGEE-Zeile ohne Token, nur "=  0,71  0,74" (SK  Anforderung)
   if (!r.fgee && /GESAMTENERGIEEFFIZIENZ-?FAKTOR/i.test(text)){
     for (const ln of lines){ const m = ln.match(/^\s*=\s*([0-3],\d{2})\s+[0-3],\d{2}\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
@@ -587,7 +605,7 @@ function extract(text){
                || reText(text, /G[üu]ltig(?:keit)?\s*bis\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i)
                || dateNear(/G[üu]ltig(?:keit)?\s*bis|G[üu]ltigkeitsdatum/i);
   r.gueltig_bis = r.gueltig_bis.replace(/\.\s+/g,'.'); // "1. 1. 2027" -> "1.1.2027"
-  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:40});
+  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:60});
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }
   for (const k of NUM_KEYS){ if (r[k]) r[k] = cleanNum(r[k]); }

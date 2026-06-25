@@ -61,12 +61,18 @@ Reproduzierbarer Referenz-Korpus in `test/samples/` (echte PDFs + handgelesene `
 | hagger_muster_wg      | März 2015 | GEQ              | WG (EFH) |
 | eawz_2015plus_wg      | März 2015 | eawz Vorarlberg  | WG (eigene Layout-Familie) |
 | iu_2019_wg            | März 2015 | ArchiPHYSIK 13   | WG |
+| hafner_2019_efh       | März 2015 | GEQ              | WG (EFH, Planung) |
 | fiby_2015_nwg_hallenbad / _schule | März 2015 | GEQ (FIBY/AEE) | **Nicht-WG** |
+| krems_2015_nwg        | März 2015 | ECOTECH 3.3      | **Nicht-WG** (Büro) |
 | michaelauer_2024_efh  | April 2019| GEQ              | WG (EFH) |
+| kappl_2019_nwg        | April 2019| ETU Gebäudeprofi | **Nicht-WG** (Büro, Kühlfelder) |
+| sallingberg_2019_nwg  | April 2019| ECOTECH 3.3      | **Nicht-WG** (Extrembestand: HWB 615, fGEE 7,1) |
 | arwag_ifea_wg         | Mai 2023  | ArchiPHYSIK 25   | WG |
 
-Damit vier OIB-Ausgaben (2011/2015/2019/2023) und drei Layout-Familien (klassische Tabellen,
-GEQ-/ArchiPHYSIK-Kennwertblöcke mit getrennten RK/SK-Spalten, eawz-Vorarlberg) abgedeckt.
+Damit vier OIB-Ausgaben (2011/2015/2019/2023) und mehrere Layout-Familien:
+klassische Tabellen, GEQ-/ArchiPHYSIK-/ETU-/ECOTECH-Kennwertblöcke (getrennte RK/SK/Ref-Spalten),
+eawz-Vorarlberg — Wohn- und Nicht-Wohngebäude inkl. Kühl-/Betriebsstrom-Felder und Extremwerte
+(fGEE > 4). Gescannte PDFs ohne Textebene (z. B. ältere GEQ-2009-Muster) sind kein Testfall (keine OCR).
 
 Bewusste Grenzen: gescannte PDFs → `MANUELL` (keine OCR). RK/SK/Ref-Spalten nur, wenn der Ausweis
 sie ausweist. Bei exotischen Layouts lieber leer/`MANUELL` als falscher Wert → in der editierbaren
