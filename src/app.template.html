@@ -46,11 +46,12 @@
   .filterbox input,.filterbox select{
     font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;
   }
-  .stats{margin-left:auto;display:flex;gap:14px;font-size:13px;align-items:center}
+  .stats{margin-left:auto;display:flex;gap:8px;font-size:13px;align-items:center;flex-wrap:wrap}
   .pill{padding:3px 10px;border-radius:12px;font-weight:600}
   .pill.ok{background:#e3f1e4;color:var(--ok)}
   .pill.manuell{background:#f7e3e3;color:var(--manuell)}
   .pill.total{background:#e4eef4;color:var(--gbg-blue)}
+  .pill.skip{background:#eceff1;color:#607d8b}
   #progress{height:6px;background:#dde5ea;border-radius:3px;overflow:hidden;margin-bottom:14px;display:none}
   #progress>div{height:100%;width:0;background:var(--gbg-blue-light);transition:width .2s}
   .note{font-size:12.5px;color:#5a6b78;margin:6px 0 14px;line-height:1.5}
@@ -103,8 +104,9 @@
 
   <div class="note" id="hint">
     <b>So geht's:</b> „Ordner wählen" → den Wurzelordner auswählen. Es werden <b>nur Ordner mit
-    „ENERGIE" im Namen</b> durchsucht (Teilbaum inklusive; Dateinamen egal). Zellen sind direkt editierbar — korrigier was die
-    automatische Erkennung verfehlt, <b>dann</b> exportieren. Zeilen mit Status
+    „ENERGIE" im Namen</b> durchsucht (Teilbaum inklusive; Dateinamen egal). PDFs, die offensichtlich
+    <b>kein</b> Energieausweis sind, werden automatisch <b>übersprungen</b>. Zellen sind direkt editierbar
+    — korrigier was die Erkennung verfehlt, <b>dann</b> exportieren. Status
     <span class="warnB">manuell</span> = gescannt oder Format weicht zu stark ab → bitte von Hand prüfen.
     <br>Browser: <b>Edge</b> oder Chrome (Firefox kann keine Ordner lesen).
   </div>
@@ -134,114 +136,198 @@
   }
 })();
 
-// ---- Spaltendefinition (Maximal-Satz, OIB Energieausweis Österreich) ----
+// ============================================================================
+//  Spalten — Vereinigungsmenge ALLER OIB-Ausgaben. Fehlt ein Wert in einer
+//  Version, bleibt seine Spalte leer. So sind alle Ausweise vergleichbar.
+// ============================================================================
 const COLUMNS = [
   {key:'datei',          label:'Datei',                    edit:false},
   {key:'status',         label:'Status',                   edit:false, cls:'status'},
+  {key:'ea_nummer',      label:'EA-Nr',                    edit:true},
+  {key:'ausgabe',        label:'OIB-Ausgabe',              edit:true},
   {key:'adresse',        label:'Adresse / Objekt',         edit:true},
   {key:'plz_ort',        label:'PLZ / Ort',                edit:true},
   {key:'kg',             label:'Katastralgemeinde',        edit:true},
   {key:'gstnr',          label:'Grundstücksnr',            edit:true},
+  {key:'einlagezahl',    label:'Einlagezahl',              edit:true},
   {key:'kategorie',      label:'Gebäudekategorie',         edit:true},
-  {key:'ausgabe',        label:'OIB-Ausgabe',              edit:true},
+  {key:'nutzungsprofil', label:'Nutzungsprofil',           edit:true},
   {key:'baujahr',        label:'Baujahr',                  edit:true},
+  {key:'lueftung',       label:'Lüftung',                  edit:true},
   {key:'bgf',            label:'Brutto-Grundfläche m²',    edit:true},
   {key:'bezugsflaeche',  label:'kond./Bezugsfläche m²',    edit:true},
-  {key:'hwb',            label:'HWB Ref kWh/m²a',          edit:true},
+  {key:'bruttovolumen',  label:'Brutto-Volumen m³',        edit:true},
+  {key:'char_laenge',    label:'charakt. Länge lc [m]',    edit:true},
+  {key:'kompaktheit',    label:'Kompaktheit A/V',          edit:true},
+  {key:'u_mittel',       label:'mittl. U-Wert',            edit:true},
+  {key:'klimaregion',    label:'Klimaregion',              edit:true},
+  {key:'seehoehe',       label:'Seehöhe m',                edit:true},
+  {key:'heizgradtage',   label:'Heizgradtage Kd',          edit:true},
+  {key:'norm_aussen',    label:'Norm-Außentemp °C',        edit:true},
+  {key:'heiztage',       label:'Heiztage d',               edit:true},
+  {key:'hwb',            label:'HWB kWh/m²a',              edit:true},
   {key:'hwb_sk',         label:'HWB SK kWh/m²a',           edit:true},
   {key:'hwb_klasse',     label:'HWB-Klasse',               edit:true},
-  {key:'peb',            label:'PEB kWh/m²a',              edit:true},
+  {key:'wwwb',           label:'WWWB kWh/m²a',             edit:true},
+  {key:'heb',            label:'HEB kWh/m²a',              edit:true},
+  {key:'hteb',           label:'HTEB kWh/m²a',             edit:true},
   {key:'eeb',            label:'EEB kWh/m²a',              edit:true},
+  {key:'eeb_sk',         label:'EEB SK kWh/m²a',           edit:true},
+  {key:'peb',            label:'PEB kWh/m²a',              edit:true},
+  {key:'peb_sk',         label:'PEB SK kWh/m²a',           edit:true},
   {key:'fgee',           label:'fGEE',                     edit:true},
+  {key:'fgee_klasse',    label:'fGEE-Klasse',              edit:true},
   {key:'co2',            label:'CO₂ kg/m²a',               edit:true},
-  {key:'energietraeger', label:'Energieträger',            edit:true},
+  {key:'co2_sk',         label:'CO₂ SK kg/m²a',            edit:true},
+  {key:'lek',            label:'LEK-Wert',                 edit:true},
   {key:'ausstelldatum',  label:'Ausstelldatum',            edit:true},
   {key:'gueltig_bis',    label:'Gültig bis',               edit:true},
   {key:'aussteller',     label:'Aussteller',               edit:true},
   {key:'pfad',           label:'Pfad',                     edit:false},
 ];
 
-// ---- Feld-Patterns. Mehrere Aliasse pro Feld, da jeder Aussteller anders schreibt. ----
-// Reihenfolge = Priorität; erster Treffer gewinnt.
-const PATTERNS = {
-  adresse: [
-    // Separator (: oder -) zwingend, sonst matcht ein bloßes Überschriften-Wort „Gebäude"
-    /(?:Geb[äa]udeadresse|Objekt(?:adresse)?|Liegenschaft|Bauvorhaben|Standort|Anschrift|Adresse)\s*[:\-]\s*([A-ZÄÖÜ][^\n]{4,70})/i,
-  ],
-  plz_ort: [ /\b(\d{4}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-\/ ]{2,40})/ ],
-  kg: [
-    /Katastralgemeinde\s*(?:\(KG\))?\s*[:\-]?\s*([^\n]{2,45})/i,
-    /\bKG[\s.\-]{0,3}(\d{3,5}[^\n]{0,30})/i,
-  ],
-  gstnr: [
-    /Grundst[üu]cks?(?:nummer|nr)\.?\s*[:\-]?\s*([0-9][0-9\/.\- ]{0,18})/i,
-    /\bGst\.?[\s\-Nr.]{0,5}([0-9][0-9\/]{0,14})/i,
-  ],
-  kategorie: [ /(Wohngeb[äa]ude|Nichtwohngeb[äa]ude|B[üu]rogeb[äa]ude|Schule|Kindergarten|Krankenhaus|Hotel|Veranstaltungsst[äa]tte|Sportst[äa]tte)/i ],
-  // OIB-Ausgabe/Version des Energieausweises (z.B. "Ausgabe März 2015", "OIB-Richtlinie 6 April 2019")
-  ausgabe: [
-    /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i,
-    /OIB[\s\-]*(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i,
-    /(?:Richtlinie|RL)\.?\s*6[^\n]{0,25}?((?:19|20)\d{2})/i,
-  ],
-  baujahr: [ /(?:Baujahr|Errichtungsjahr|Bestand\s*seit|Baubewilligung)\s*[:\-]?\s*(?:[^0-9]{0,8})?((?:18|19|20)\d{2})/i ],
-  bgf: [
-    /Brutto[\-\s]?Grundfl[äa]che\s*(?:BGF)?\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
-    /\bBGF\b[^0-9]{0,8}([0-9][0-9.,]{1,9})/,
-  ],
-  bezugsflaeche: [
-    /konditionierte?\s*(?:Brutto[\-\s]?Grundfl[äa]che|Fl[äa]che|Nutzfl[äa]che)\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
-    /Bezugsfl[äa]che\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
-  ],
-  hwb: [
-    /HWB\s*Ref\s*[,.]?\s*RK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i,
-    /HWB\s*[,]?\s*RK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i,
-    /Heizw[äa]rmebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i,
-    /\bHWB\b[^0-9A-Za-z\-]{0,6}([0-9][0-9.,]{0,7})\s*kWh/i,
-  ],
-  hwb_sk: [ /HWB\s*[,]?\s*SK[^0-9\-]{0,10}([0-9][0-9.,]{0,7})/i ],
-  hwb_klasse: [ /HWB[\s\-]*Klasse[^A-G]{0,8}([A-G][+]{0,2})/i, /Energieeffizienzklasse[^A-G]{0,8}([A-G][+]{0,2})/i ],
-  peb: [ /\bPEB\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,7})/i, /Prim[äa]renergiebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i ],
-  eeb: [ /\bEEB\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,7})/i, /Endenergiebedarf[^0-9\-]{0,12}([0-9][0-9.,]{0,7})/i ],
-  fgee: [ /\bfGEE\b[^0-9\-]{0,8}([0-9](?:[.,][0-9]{1,3})?)/i, /Gesamtenergieeffizienz[\-\s]?Faktor[^0-9\-]{0,10}([0-9](?:[.,][0-9]{1,3})?)/i ],
-  co2: [ /\bCO2\b[^0-9A-Za-z\-]{0,8}([0-9][0-9.,]{0,6})/i, /Kohlendioxid[^0-9\-]{0,14}([0-9][0-9.,]{0,6})/i ],
-  energietraeger: [ /(?:Energietr[äa]ger|W[äa]rmebereitstellung|Heizsystem|Heizung)\s*[:\-]?\s*([A-ZÄÖÜ][^\n]{3,40})/i ],
-  ausstelldatum: [ /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt\s*am|Datum\s*der\s*Ausstellung)\s*[:\-]?\s*(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i ],
-  gueltig_bis: [ /(?:G[üu]ltig\s*bis|G[üu]ltigkeit\s*bis|G[üu]ltig\s*bis\s*zum)\s*[:\-]?\s*(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i ],
-  aussteller: [
-    /(?:Aussteller(?:in)?|Ersteller(?:in)?|Planverfasser|erstellt\s*durch|Bearbeiter)\s*[:\-]?\s*([A-ZÄÖÜ][^\n]{3,50})/i,
-  ],
-};
+// Spalten, die als Zahl ins Excel sollen (Komma->Punkt-normalisiert)
+const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','char_laenge','kompaktheit','u_mittel',
+  'seehoehe','heizgradtage','norm_aussen','heiztage','hwb','hwb_sk','wwwb','heb','hteb','eeb','eeb_sk',
+  'peb','peb_sk','co2','co2_sk','lek','fgee']);
+// Kennzahlen für Status-Bewertung
+const KENNZAHLEN = ['hwb','hwb_sk','wwwb','heb','hteb','eeb','eeb_sk','peb','peb_sk','co2','co2_sk','fgee','lek'];
 
-const NUM_FIELDS = new Set(['hwb','hwb_sk','peb','eeb','fgee','co2','bgf','bezugsflaeche']);
-
+// ============================================================================
+//  Extraktions-Engine — zellenbasiert. Layouttreuer Text wird in Spalten
+//  (durch 2+ Leerzeichen getrennt) zerlegt; Label -> Wert aus Folgezelle.
+// ============================================================================
 function cleanNum(s){
-  // österr. Dezimal: '1.234,56' → '1234.56'; '12,3' → '12.3'
-  s = s.replace(/[^\d.,]/g,'');
-  if (s.indexOf(',')>-1){ s = s.replace(/\./g,'').replace(',', '.'); }
-  return s.replace(/\.(?=.*\.)/g,''); // mehrfach-Punkte tilgen
+  s = String(s).trim().replace(/[^\d.,\-]/g,'');
+  if (s.indexOf(',')>-1) s = s.replace(/\./g,'').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,''); // 20.516 -> 20516
+  return s;
+}
+const SHORT_COMMA = /(?<![\d.,])\d{1,3},\d+/g;          // spezifischer Wert (kWh/m²a)
+function shortCommas(line){ return line.match(SHORT_COMMA) || []; }
+function numBeforeUnit(str, unit){
+  const m = str.match(new RegExp('(-?\\d[\\d.]*(?:,\\d+)?)\\s*'+unit,'i'));
+  return m ? cleanNum(m[1]) : '';
+}
+function firstNum(s){ const m = String(s).match(/-?\d[\d.]*(?:,\d+)?/); return m ? cleanNum(m[0]) : ''; }
+function cells(line){ return line.split(/\s{2,}/).map(c=>c.trim()).filter(Boolean); }
+function reText(text, re){ return (text.replace(/[ \t]+/g,' ').match(re) || [])[1] || ''; }
+
+// Label -> Wert. num:true => Zahl (optional vor Einheit). Sonst Text aus Folgezelle.
+function byLabel(lines, labelRe, opt){
+  opt = opt || {};
+  const max = opt.max || 40;
+  for (const raw of lines){
+    const cs = cells(raw);
+    for (let i=0;i<cs.length;i++){
+      const mm = cs[i].match(labelRe); if (!mm) continue;
+      const rest = cs[i].slice(mm.index+mm[0].length).replace(/^[\s:|=().\-]+/,'').trim();
+      const next = cs[i+1]||'', next2 = cs[i+2]||'';
+      if (opt.num){
+        const search = (rest+'  '+next+'  '+next2).trim();
+        if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (u!=='') return u; }
+        const n = firstNum(rest) || firstNum(next); if (n!=='') return n;
+        continue;
+      }
+      let val = rest || next;
+      if (/^(laut|gem|nach|gem[äa][ßs])\b/i.test(val) && next) val = next; // "Gebäudekategorie laut WBF"
+      if (/^\d{4}$/.test(val) && next2 && /^[A-ZÄÖÜ]/.test(next2)) val = val+' '+next2; // PLZ + Ort getrennt
+      if (val) return val.slice(0,max).trim();
+    }
+  }
+  return '';
+}
+
+// Energie-Kennzahl: erste Zeile mit Abkürzung UND echtem Wert (short-comma oder Zahl vor Einheit).
+// Reine Definitions-/Überschriftzeilen (ohne Zahl) werden so übersprungen.
+function metric(lines, abbrRe, unit){
+  unit = unit || 'kWh\\/m²a';
+  for (const raw of lines){
+    if (!abbrRe.test(raw)) continue;
+    const sc = shortCommas(raw); if (sc.length) return cleanNum(sc[0]);
+    const u = numBeforeUnit(raw, unit); if (u!=='') return u;
+  }
+  return '';
+}
+function metricSK(lines, abbr){
+  const re = new RegExp(abbr+'[\\s,]*SK\\b','i');
+  for (const raw of lines){ if (!re.test(raw)) continue; const sc = shortCommas(raw); if (sc.length) return cleanNum(sc[0]); }
+  return '';
+}
+
+// Ist das überhaupt ein Energieausweis? (sonst überspringen)
+function isEnergieausweis(text){
+  const t = text.toLowerCase(); let s = 0;
+  if (/energieausweis/.test(t)) s += 2;
+  if (/heizw[äa]rmebedarf|\bhwb\b/.test(t)) s++;
+  if (/gesamtenergieeffizienz|\bfgee\b/.test(t)) s++;
+  if (/oib[\s\-]?richtlinie\s*6|prim[äa]renergie|\bpeb\b/.test(t)) s++;
+  if (/kwh\/m²a|kwh\/m2a/.test(t)) s++;
+  return s >= 2;
 }
 
 function extract(text){
-  // Normalisieren: Zeilenumbrüche behalten, Mehrfach-Spaces zu einem
-  const norm = text.replace(/­/g,'').replace(/[ \t]+/g,' ').replace(/\r/g,'');
-  const out = {};
-  for (const key in PATTERNS){
-    out[key] = '';
-    for (const re of PATTERNS[key]){
-      const m = norm.match(re);
-      if (m && m[1]){
-        let v = m[1].trim().replace(/\s{2,}/g,' ');
-        if (NUM_FIELDS.has(key)) v = cleanNum(v);
-        if (v){ out[key]=v; break; }
-      }
-    }
-  }
-  return out;
+  const lines = text.replace(/\r/g,'').split('\n');
+  const r = {};
+  r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?Nr\.?|EA[- ]?Nr\.?/i, {max:20})
+                 || reText(text, /Energieausweis[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i);
+  r.ausgabe      = reText(text, /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /(?:Richtlinie|RL)\.?\s*6[^\n]{0,25}?((?:19|20)\d{2})/i);
+  r.adresse      = byLabel(lines, /(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaft|Adresse)\b/i, {max:50});
+  r.plz_ort      = byLabel(lines, /PLZ\s*\/?\s*Ort\b/i, {max:40})
+                 || reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
+  r.kg           = byLabel(lines, /Katastralgemeinde\b/i, {max:28});
+  r.gstnr        = byLabel(lines, /Grundst[üu]cks?(?:nummer|nr)\.?/i, {max:18});
+  if (!/\d/.test(r.gstnr)) r.gstnr = '';
+  r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
+  if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
+  r.kategorie    = reText(text, /\b(Nichtwohngeb[äa]ude|Wohngeb[äa]ude)\b/i)
+                 || byLabel(lines, /Geb[äa]udekategorie\b/i, {max:30});
+  r.nutzungsprofil = byLabel(lines, /Nutzungsprofil\b/i, {max:30});
+  r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr/i, {num:true})
+                 || reText(text, /(?:Baujahr|Errichtungsjahr)\D{0,8}((?:18|19|20)\d{2})/i);
+  r.lueftung     = byLabel(lines, /Art der L[üu]ftung|L[üu]ftung\b/i, {max:28});
+  r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²'});
+  r.bezugsflaeche= byLabel(lines, /Bezugsfl[äa]che|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²'});
+  r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto-?Volumen/i, {num:true, unit:'m³'});
+  r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m'});
+  r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true});
+  r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true});
+  r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:14});
+  r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m'});
+  r.heizgradtage = byLabel(lines, /Heizgradtage/i, {num:true, unit:'K'});
+  r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C'});
+  r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d'});
+  r.hwb    = metric(lines, /\bHWB(?:Ref|-?ref|RK|-?RK|T)?\.?\b/i);
+  r.hwb_sk = metricSK(lines, 'HWB');
+  r.wwwb   = metric(lines, /\bWWWB\b/i);
+  r.heb    = metric(lines, /\bHEB\b/i);
+  r.hteb   = metric(lines, /\bHTEB(?:-RH)?\b/i);
+  r.eeb    = metric(lines, /\bEEB\b/i);
+  r.eeb_sk = metricSK(lines, 'EEB');
+  r.peb    = metric(lines, /\bPEB\b/i);
+  r.peb_sk = metricSK(lines, 'PEB');
+  r.co2    = metric(lines, /\bCO2\b/i, 'kg');
+  r.co2_sk = metricSK(lines, 'CO2');
+  r.lek    = reText(text, /\bLEK[T]?\s*-?\s*Wert\D{0,15}(\d{1,3}(?:,\d+)?)/i);
+  const fg = text.replace(/[ \t]+/g,' ');
+  r.fgee        = (fg.match(/\bfGEE\b[^\n]{0,12}?([01],\d{1,3})/i)||[])[1] || '';
+  r.fgee_klasse = (fg.match(/\bfGEE\b[^\n]{0,18}?\(?([A-G]\+{0,2})\)/i)||[])[1] || '';
+  r.hwb_klasse  = (fg.match(/HWB[\s\-]*Klasse[^A-G]{0,8}([A-G]\+{0,2})/i)||[])[1] || '';
+  r.ausstelldatum = reText(text, /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt am|Ausstellung)\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i)
+                 || reText(text, /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt am)\D{0,8}(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i);
+  r.gueltig_bis = reText(text, /G[üu]ltig(?:keit)?\s*bis\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i);
+  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:40});
+  // Aufräumen + Zahlen normalisieren
+  for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }
+  for (const k of NUM_KEYS){ if (r[k]) r[k] = cleanNum(r[k]); }
+  return r;
 }
 
 // ---- State ----
-let DATA = [];      // {row-object}
+let DATA = [];
+let SKIPPED = 0;
 let dirName = '';
 
 // ---- UI bauen ----
@@ -290,17 +376,21 @@ function updateStats(){
   const total=DATA.length;
   const man=DATA.filter(d=>d.status.toLowerCase().includes('manuell')).length;
   const ok=total-man;
-  document.getElementById('stats').innerHTML =
-    total ? '<span class="pill total">'+total+' PDFs</span><span class="pill ok">'+ok+' OK</span><span class="pill manuell">'+man+' manuell</span>' : '';
+  let html='';
+  if (total||SKIPPED){
+    html='<span class="pill total">'+total+' Energieausweise</span>'
+       + '<span class="pill ok">'+ok+' OK</span>'
+       + '<span class="pill manuell">'+man+' manuell</span>';
+    if (SKIPPED) html+='<span class="pill skip">'+SKIPPED+' übersprungen</span>';
+  }
+  document.getElementById('stats').innerHTML = html;
   document.getElementById('export').disabled = total===0;
 }
 
 document.getElementById('search').addEventListener('input',render);
 document.getElementById('statusFilter').addEventListener('change',render);
 
-// ---- Ordner rekursiv einlesen ----
-// Nur PDFs liefern, die in (oder unter) einem Ordner mit "ENERGIE" im Namen liegen.
-// Dateinamen sind egal. Sobald ein Ordner matcht, zählt sein ganzer Teilbaum.
+// ---- Ordner rekursiv einlesen — nur Teilbäume unter einem Ordner mit "ENERGIE" im Namen ----
 const ENERGIE_RE = /energie/i;
 async function* walk(dirHandle, prefix='', inEnergie=false){
   for await (const [name, handle] of dirHandle.entries()){
@@ -313,18 +403,39 @@ async function* walk(dirHandle, prefix='', inEnergie=false){
   }
 }
 
+// PDF -> layouttreuer Text. Items werden je Zeile (y) gruppiert und nach x sortiert,
+// Spaltenlücken als Doppel-Leerzeichen -> die Zellen-Logik kann Label/Wert trennen.
 async function pdfToText(file){
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({data:buf, useWorkerFetch:false, isEvalSupported:false}).promise;
+  const pages = doc.numPages;
   let text='';
-  const n = Math.min(doc.numPages, 12); // Energieausweise selten >12 Seiten
+  const n = Math.min(pages, 14);
   for (let p=1;p<=n;p++){
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
-    text += tc.items.map(i=>i.str).join(' ')+'\n';
+    const linesMap = new Map();
+    for (const it of tc.items){
+      if (!it.str || !it.transform) continue;
+      const key = Math.round(it.transform[5]/2)*2;      // y auf 2px-Raster
+      if (!linesMap.has(key)) linesMap.set(key, []);
+      linesMap.get(key).push({x: it.transform[4], s: it.str});
+    }
+    const ys = [...linesMap.keys()].sort((a,b)=>b-a);    // oben (großes y) zuerst
+    for (const y of ys){
+      const parts = linesMap.get(y).sort((a,b)=>a.x-b.x);
+      let line='', lastX=null;
+      for (const part of parts){
+        if (lastX!==null && part.x-lastX > 14) line+='  '; // Spaltenlücke -> Doppel-Space
+        line += part.s;
+        lastX = part.x + part.s.length*5;
+      }
+      text += line+'\n';
+    }
+    text += '\n';
   }
   await doc.destroy();
-  return {text, pages:doc.numPages};
+  return {text, pages};
 }
 
 const prog = document.getElementById('progress');
@@ -337,18 +448,17 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   }
   let dir;
   try{ dir = await window.showDirectoryPicker(); }
-  catch(e){ return; } // abgebrochen
+  catch(e){ return; }
   dirName = dir.name;
 
   document.getElementById('hint').style.display='none';
   document.getElementById('pick').disabled=true;
   prog.style.display='block'; progBar.style.width='0%';
 
-  // erst alle PDFs sammeln (für Fortschritt) — Startordner selbst zählt, falls er ENERGIE heißt
   const list=[];
   for await (const f of walk(dir, '', ENERGIE_RE.test(dir.name))) list.push(f);
 
-  DATA=[];
+  DATA=[]; SKIPPED=0;
   for (let i=0;i<list.length;i++){
     const {handle, path} = list[i];
     const row = {datei:handle.name, pfad:path, status:''};
@@ -356,30 +466,37 @@ document.getElementById('pick').addEventListener('click', async ()=>{
       const file = await handle.getFile();
       const {text, pages} = await pdfToText(file);
       const charsPerPage = text.replace(/\s/g,'').length / Math.max(pages,1);
-      const fields = extract(text);
-      Object.assign(row, fields);
 
-      const coreMissing = !fields.hwb && !fields.fgee && !fields.peb;
       if (charsPerPage < 60){
+        // Kein Textlayer -> gescannt. In ENERGIE-Ordnern vermutlich ein Ausweis -> manuell, nicht skippen.
         row.status = 'MANUELL · kein Text (Scan?)';
-      } else if (coreMissing){
-        row.status = 'MANUELL · Kennzahlen nicht gefunden';
+        DATA.push(row);
+      } else if (!isEnergieausweis(text)){
+        // Hat Text, ist aber offensichtlich kein Energieausweis -> überspringen.
+        SKIPPED++;
       } else {
-        const got = ['hwb','fgee','peb','eeb','co2'].filter(k=>fields[k]).length;
-        row.status = 'OK · '+got+'/5 Kennzahlen';
+        Object.assign(row, extract(text));
+        const got = KENNZAHLEN.filter(k=>row[k]).length;
+        if (!row.hwb && !row.fgee && !row.peb && !row.hwb_sk && !row.lek){
+          row.status = 'MANUELL · Kennzahlen nicht gefunden';
+        } else {
+          row.status = 'OK · '+got+' Kennzahlen';
+        }
+        DATA.push(row);
       }
     }catch(err){
       row.status = 'MANUELL · Lesefehler ('+(err.message||err)+')';
+      DATA.push(row);
     }
-    DATA.push(row);
     progBar.style.width = Math.round(((i+1)/list.length)*100)+'%';
-    if (i % 5 === 0) render(); // gelegentlich live-update
+    if (i % 5 === 0) render();
   }
 
   prog.style.display='none';
   document.getElementById('pick').disabled=false;
   render();
   if (!list.length) alert('Keine PDFs in Ordnern mit „ENERGIE" im Namen unter „'+dirName+'" gefunden.\n(Es werden nur solche Ordner durchsucht.)');
+  else if (!DATA.length) alert('Gefundene PDFs sind offenbar keine Energieausweise – alle übersprungen.');
 });
 
 // ---- Excel-Export ----
@@ -387,7 +504,7 @@ document.getElementById('export').addEventListener('click', ()=>{
   const aoa = [ COLUMNS.map(c=>c.label) ];
   DATA.forEach(d=> aoa.push(COLUMNS.map(c=>{
     let v = d[c.key]||'';
-    if (NUM_FIELDS.has(c.key) && v!=='' && !isNaN(v)) return Number(v);
+    if (NUM_KEYS.has(c.key) && v!=='' && !isNaN(v)) return Number(v);
     return v;
   })));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
