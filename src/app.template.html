@@ -102,8 +102,8 @@
   <div id="progress"><div></div></div>
 
   <div class="note" id="hint">
-    <b>So geht's:</b> „Ordner wählen" → den Wurzelordner mit allen Energieausweis-PDFs auswählen
-    (Unterordner werden automatisch mitgelesen). Zellen sind direkt editierbar — korrigier was die
+    <b>So geht's:</b> „Ordner wählen" → den Wurzelordner auswählen. Es werden <b>nur Ordner mit
+    „ENERGIE" im Namen</b> durchsucht (Teilbaum inklusive; Dateinamen egal). Zellen sind direkt editierbar — korrigier was die
     automatische Erkennung verfehlt, <b>dann</b> exportieren. Zeilen mit Status
     <span class="warnB">manuell</span> = gescannt oder Format weicht zu stark ab → bitte von Hand prüfen.
     <br>Browser: <b>Edge</b> oder Chrome (Firefox kann keine Ordner lesen).
@@ -143,6 +143,7 @@ const COLUMNS = [
   {key:'kg',             label:'Katastralgemeinde',        edit:true},
   {key:'gstnr',          label:'Grundstücksnr',            edit:true},
   {key:'kategorie',      label:'Gebäudekategorie',         edit:true},
+  {key:'ausgabe',        label:'OIB-Ausgabe',              edit:true},
   {key:'baujahr',        label:'Baujahr',                  edit:true},
   {key:'bgf',            label:'Brutto-Grundfläche m²',    edit:true},
   {key:'bezugsflaeche',  label:'kond./Bezugsfläche m²',    edit:true},
@@ -177,6 +178,12 @@ const PATTERNS = {
     /\bGst\.?[\s\-Nr.]{0,5}([0-9][0-9\/]{0,14})/i,
   ],
   kategorie: [ /(Wohngeb[äa]ude|Nichtwohngeb[äa]ude|B[üu]rogeb[äa]ude|Schule|Kindergarten|Krankenhaus|Hotel|Veranstaltungsst[äa]tte|Sportst[äa]tte)/i ],
+  // OIB-Ausgabe/Version des Energieausweises (z.B. "Ausgabe März 2015", "OIB-Richtlinie 6 April 2019")
+  ausgabe: [
+    /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i,
+    /OIB[\s\-]*(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i,
+    /(?:Richtlinie|RL)\.?\s*6[^\n]{0,25}?((?:19|20)\d{2})/i,
+  ],
   baujahr: [ /(?:Baujahr|Errichtungsjahr|Bestand\s*seit|Baubewilligung)\s*[:\-]?\s*(?:[^0-9]{0,8})?((?:18|19|20)\d{2})/i ],
   bgf: [
     /Brutto[\-\s]?Grundfl[äa]che\s*(?:BGF)?\s*[:\-]?\s*([0-9][0-9.,]{1,9})/i,
@@ -292,12 +299,15 @@ document.getElementById('search').addEventListener('input',render);
 document.getElementById('statusFilter').addEventListener('change',render);
 
 // ---- Ordner rekursiv einlesen ----
-async function* walk(dirHandle, prefix=''){
+// Nur PDFs liefern, die in (oder unter) einem Ordner mit "ENERGIE" im Namen liegen.
+// Dateinamen sind egal. Sobald ein Ordner matcht, zählt sein ganzer Teilbaum.
+const ENERGIE_RE = /energie/i;
+async function* walk(dirHandle, prefix='', inEnergie=false){
   for await (const [name, handle] of dirHandle.entries()){
     const path = prefix ? prefix+'/'+name : name;
     if (handle.kind==='directory'){
-      yield* walk(handle, path);
-    } else if (name.toLowerCase().endsWith('.pdf')){
+      yield* walk(handle, path, inEnergie || ENERGIE_RE.test(name));
+    } else if (inEnergie && name.toLowerCase().endsWith('.pdf')){
       yield {handle, path};
     }
   }
@@ -334,9 +344,9 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   document.getElementById('pick').disabled=true;
   prog.style.display='block'; progBar.style.width='0%';
 
-  // erst alle PDFs sammeln (für Fortschritt)
+  // erst alle PDFs sammeln (für Fortschritt) — Startordner selbst zählt, falls er ENERGIE heißt
   const list=[];
-  for await (const f of walk(dir)) list.push(f);
+  for await (const f of walk(dir, '', ENERGIE_RE.test(dir.name))) list.push(f);
 
   DATA=[];
   for (let i=0;i<list.length;i++){
@@ -369,7 +379,7 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   prog.style.display='none';
   document.getElementById('pick').disabled=false;
   render();
-  if (!list.length) alert('Keine PDF-Dateien in „'+dirName+'" gefunden.');
+  if (!list.length) alert('Keine PDFs in Ordnern mit „ENERGIE" im Namen unter „'+dirName+'" gefunden.\n(Es werden nur solche Ordner durchsucht.)');
 });
 
 // ---- Excel-Export ----

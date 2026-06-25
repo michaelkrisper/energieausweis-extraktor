@@ -8,8 +8,8 @@ kein Server, keine Installation, keine Daten verlassen den Rechner.
 
 1. `dist/index.html` auf den Rechner kopieren und in **Microsoft Edge** (oder Chrome) öffnen
    — Doppelklick genügt.
-2. **„📁 Ordner wählen"** → den Wurzelordner mit den Energieausweisen wählen. Unterordner werden
-   automatisch mitgelesen.
+2. **„📁 Ordner wählen"** → den Wurzelordner wählen. Es werden **nur Ordner durchsucht, die
+   `ENERGIE` im Namen tragen** (Teilbaum inklusive; Dateinamen sind egal).
 3. Tabelle prüfen. **Jede Zelle ist editierbar** — Erkennungsfehler direkt korrigieren.
 4. **„⬇ Excel exportieren"** → fertige `.xlsx`.
 
@@ -22,9 +22,10 @@ kein Server, keine Installation, keine Daten verlassen den Rechner.
 
 ## Extrahierte Felder
 
-Datei · Status · Adresse · PLZ/Ort · Katastralgemeinde · Grundstücksnr · Gebäudekategorie · Baujahr ·
-Brutto-Grundfläche · kond./Bezugsfläche · HWB Ref · HWB SK · HWB-Klasse · PEB · EEB · fGEE · CO₂ ·
-Energieträger · Ausstelldatum · Gültig bis · Aussteller · Pfad.
+Datei · Status · Adresse · PLZ/Ort · Katastralgemeinde · Grundstücksnr · Gebäudekategorie ·
+**OIB-Ausgabe** (z. B. „März 2015", „April 2019") · Baujahr · Brutto-Grundfläche · kond./Bezugsfläche ·
+HWB Ref · HWB SK · HWB-Klasse · PEB · EEB · fGEE · CO₂ · Energieträger · Ausstelldatum · Gültig bis ·
+Aussteller · Pfad.
 
 ## Grenzen (ehrlich)
 
