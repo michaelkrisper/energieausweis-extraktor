@@ -59,6 +59,7 @@ async function pdfToText(buf) {
 	return { text, pages };
 }
 
+// Felder für den Coverage-Fallback (PDFs OHNE .expected.json)
 const FIELDS = [
 	"ausgabe",
 	"plz_ort",
@@ -67,7 +68,6 @@ const FIELDS = [
 	"baujahr",
 	"bgf",
 	"hwb",
-	"hwb_sk",
 	"wwwb",
 	"heb",
 	"eeb",
@@ -81,37 +81,141 @@ const FIELDS = [
 	"aussteller",
 ];
 
+// ---- Assert-Modus -----------------------------------------------------------
+// Vergleicht extract()-Ist gegen handgelesene Soll-Werte aus <pdf>.expected.json.
+// Keys mit "_"-Präfix sind Metadaten (Quelle/Ausgabe/Layout), keine Soll-Felder.
+// Werte werden vor dem Vergleich normalisiert (Zahlenkomma->Punkt, Whitespace),
+// damit "45,6" == "45.6" und "1 230" == "1230" als gleich gelten.
+
+function norm(v) {
+	let s = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+	// reine Zahl (evtl. mit Tausendertrenner / Komma) auf Punkt-Form bringen
+	const numlike = s.replace(/[ .](?=\d{3}\b)/g, ""); // 1.230 / 1 230 -> 1230
+	if (/^-?\d+(?:[.,]\d+)?$/.test(numlike.replace(",", "."))) {
+		let n = numlike.replace(",", ".");
+		if (n.indexOf(".") > -1) n = n.replace(/0+$/, "").replace(/\.$/, ""); // 50.0 -> 50
+		return n;
+	}
+	return s.toLowerCase();
+}
+const eq = (a, b) => norm(a) === norm(b);
+
+function classify(expected, got) {
+	const res = { PASS: [], FAIL: [], MISS: [], EXTRA: [] };
+	for (const k of Object.keys(expected)) {
+		if (k.startsWith("_")) continue;
+		const soll = expected[k];
+		const ist = got[k] || "";
+		if (eq(soll, ist)) res.PASS.push(k);
+		else if (!ist) res.MISS.push(`${k}: soll=${soll}`);
+		else res.FAIL.push(`${k}: soll=${soll} ist=${ist}`);
+	}
+	return res;
+}
+
+function loadBaseline(p) {
+	try {
+		return JSON.parse(fs.readFileSync(p, "utf8"));
+	} catch {
+		return null;
+	}
+}
+
 (async () => {
-	const dir = process.argv[2] || path.join(__dirname, "samples");
+	const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+	const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith("--")));
+	const dir = args[0] || path.join(__dirname, "samples");
+	const baselinePath = path.join(__dirname, "baseline.json");
 	if (!fs.existsSync(dir)) {
 		console.error(`Ordner nicht gefunden: ${dir}`);
 		process.exit(1);
 	}
 	const pdfs = fs
 		.readdirSync(dir)
-		.filter((f) => f.toLowerCase().endsWith(".pdf"));
+		.filter((f) => f.toLowerCase().endsWith(".pdf"))
+		.sort();
 	if (!pdfs.length) {
 		console.error(`Keine PDFs in ${dir}`);
 		process.exit(1);
 	}
 	console.log(`${pdfs.length} PDF(s) in ${dir}\n`);
+
+	let totPass = 0;
+	let totFail = 0;
+	let totMiss = 0;
+	const perPdf = {}; // name -> PASS-Quote für Baseline-Δ
+	let anyAssert = false;
+
 	for (const f of pdfs) {
-		let line = `${f.slice(0, 32).padEnd(34)}`;
+		const base = f.slice(0, 36).padEnd(38);
+		let text;
 		try {
-			const { text } = await pdfToText(
+			({ text } = await pdfToText(
 				new Uint8Array(fs.readFileSync(path.join(dir, f))),
-			);
-			if (!isEnergieausweis(text)) {
-				console.log(`${line} ÜBERSPRUNGEN (kein Energieausweis)`);
-				continue;
-			}
-			const r = extract(text);
-			const cov = FIELDS.filter((k) => r[k]).length;
-			line += `EA  ${String(cov).padStart(2)}/${FIELDS.length} Felder  `;
-			line += `hwb=${r.hwb || "·"} fgee=${r.fgee || "·"} ausgabe="${r.ausgabe || "·"}" ${r.plz_ort || ""}`;
-			console.log(line);
+			));
 		} catch (e) {
-			console.log(`${line} FEHLER: ${e.message}`);
+			console.log(`${base} FEHLER: ${e.message}`);
+			continue;
+		}
+		if (!isEnergieausweis(text)) {
+			console.log(`${base} ÜBERSPRUNGEN (kein Energieausweis)`);
+			continue;
+		}
+		const r = extract(text);
+		const expPath = path.join(dir, `${f.replace(/\.pdf$/i, "")}.expected.json`);
+
+		if (fs.existsSync(expPath)) {
+			anyAssert = true;
+			const expected = JSON.parse(fs.readFileSync(expPath, "utf8"));
+			const c = classify(expected, r);
+			const n = c.PASS.length + c.FAIL.length + c.MISS.length;
+			totPass += c.PASS.length;
+			totFail += c.FAIL.length;
+			totMiss += c.MISS.length;
+			perPdf[f] = c.PASS.length;
+			const ok = c.FAIL.length === 0 && c.MISS.length === 0;
+			console.log(
+				`${base}${ok ? "✓" : "✗"} ${String(c.PASS.length).padStart(2)}/${n} PASS` +
+					(c.FAIL.length ? `  ${c.FAIL.length} FAIL` : "") +
+					(c.MISS.length ? `  ${c.MISS.length} MISS` : ""),
+			);
+			for (const x of c.FAIL) console.log(`      FAIL  ${x}`);
+			for (const x of c.MISS) console.log(`      MISS  ${x}`);
+		} else {
+			const cov = FIELDS.filter((k) => r[k]).length;
+			console.log(
+				`${base}EA  ${String(cov).padStart(2)}/${FIELDS.length} Felder (keine Fixture)  ` +
+					`hwb=${r.hwb || "·"} fgee=${r.fgee || "·"} ausgabe="${r.ausgabe || "·"}" ${r.plz_ort || ""}`,
+			);
 		}
 	}
+
+	if (!anyAssert) return; // reiner Coverage-Lauf, kein Soll/Ist
+
+	console.log(
+		`\nGESAMT  ${totPass} PASS  ${totFail} FAIL  ${totMiss} MISS  ` +
+			`(Quote ${((totPass / (totPass + totFail + totMiss)) * 100).toFixed(1)}%)`,
+	);
+
+	// --baseline: aktuelle PASS-Zahlen speichern. Sonst gegen Baseline diffen.
+	if (flags.has("--baseline")) {
+		fs.writeFileSync(baselinePath, JSON.stringify(perPdf, null, 2));
+		console.log(`Baseline gespeichert -> ${baselinePath}`);
+	} else {
+		const prev = loadBaseline(baselinePath);
+		if (prev) {
+			const deltas = [];
+			for (const f of Object.keys(perPdf)) {
+				const d = perPdf[f] - (prev[f] ?? 0);
+				if (d !== 0) deltas.push(`${d > 0 ? "+" : ""}${d} ${f}`);
+			}
+			console.log(
+				deltas.length
+					? `Δ vs Baseline: ${deltas.join(", ")}`
+					: "Δ vs Baseline: unverändert",
+			);
+		}
+	}
+
+	process.exit(totFail > 0 ? 1 : 0);
 })();
