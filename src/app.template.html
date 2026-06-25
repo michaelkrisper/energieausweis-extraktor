@@ -165,20 +165,21 @@ const COLUMNS = [
   {key:'heizgradtage',   label:'Heizgradtage Kd',          edit:true},
   {key:'norm_aussen',    label:'Norm-Außentemp °C',        edit:true},
   {key:'heiztage',       label:'Heiztage d',               edit:true},
-  {key:'hwb',            label:'HWB kWh/m²a',              edit:true},
-  {key:'hwb_sk',         label:'HWB SK kWh/m²a',           edit:true},
+  {key:'hwb',            label:'HWB SK kWh/m²a',           edit:true},
+  {key:'hwb_rk',         label:'HWB RK kWh/m²a',           edit:true},
+  {key:'hwb_ref_sk',     label:'HWB Ref,SK kWh/m²a',       edit:true},
+  {key:'hwb_ref_rk',     label:'HWB Ref,RK kWh/m²a',       edit:true},
   {key:'hwb_klasse',     label:'HWB-Klasse',               edit:true},
   {key:'wwwb',           label:'WWWB kWh/m²a',             edit:true},
   {key:'heb',            label:'HEB kWh/m²a',              edit:true},
   {key:'hteb',           label:'HTEB kWh/m²a',             edit:true},
-  {key:'eeb',            label:'EEB kWh/m²a',              edit:true},
-  {key:'eeb_sk',         label:'EEB SK kWh/m²a',           edit:true},
-  {key:'peb',            label:'PEB kWh/m²a',              edit:true},
-  {key:'peb_sk',         label:'PEB SK kWh/m²a',           edit:true},
+  {key:'eeb',            label:'EEB SK kWh/m²a',           edit:true},
+  {key:'eeb_rk',         label:'EEB RK kWh/m²a',           edit:true},
+  {key:'peb',            label:'PEB SK kWh/m²a',           edit:true},
   {key:'fgee',           label:'fGEE',                     edit:true},
+  {key:'fgee_rk',        label:'fGEE RK',                  edit:true},
   {key:'fgee_klasse',    label:'fGEE-Klasse',              edit:true},
-  {key:'co2',            label:'CO₂ kg/m²a',               edit:true},
-  {key:'co2_sk',         label:'CO₂ SK kg/m²a',            edit:true},
+  {key:'co2',            label:'CO₂ SK kg/m²a',            edit:true},
   {key:'lek',            label:'LEK-Wert',                 edit:true},
   {key:'ausstelldatum',  label:'Ausstelldatum',            edit:true},
   {key:'gueltig_bis',    label:'Gültig bis',               edit:true},
@@ -188,28 +189,33 @@ const COLUMNS = [
 
 // Spalten, die als Zahl ins Excel sollen (Komma->Punkt-normalisiert)
 const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','char_laenge','kompaktheit','u_mittel',
-  'seehoehe','heizgradtage','norm_aussen','heiztage','hwb','hwb_sk','wwwb','heb','hteb','eeb','eeb_sk',
-  'peb','peb_sk','co2','co2_sk','lek','fgee']);
+  'seehoehe','heizgradtage','norm_aussen','heiztage','hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','wwwb',
+  'heb','hteb','eeb','eeb_rk','peb','co2','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
-const KENNZAHLEN = ['hwb','hwb_sk','wwwb','heb','hteb','eeb','eeb_sk','peb','peb_sk','co2','co2_sk','fgee','lek'];
+const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','wwwb','heb','hteb','eeb','peb','co2','fgee','lek'];
 
 // ============================================================================
 //  Extraktions-Engine — zellenbasiert. Layouttreuer Text wird in Spalten
 //  (durch 2+ Leerzeichen getrennt) zerlegt; Label -> Wert aus Folgezelle.
 // ============================================================================
 function cleanNum(s){
-  s = String(s).trim().replace(/[^\d.,\-]/g,'');
+  s = String(s).replace(/(\d)\s+(?=\d{3}\b)/g,'$1'); // "12 433" -> "12433"
+  s = s.trim().replace(/[^\d.,\-]/g,'');
   if (s.indexOf(',')>-1) s = s.replace(/\./g,'').replace(',', '.');
   else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,''); // 20.516 -> 20516
   return s;
 }
 const SHORT_COMMA = /(?<![\d.,])\d{1,3},\d+/g;          // spezifischer Wert (kWh/m²a)
 function shortCommas(line){ return line.match(SHORT_COMMA) || []; }
+// Zahl inkl. Tausender als Punkt ODER Leerzeichen (12 433 / 2.493,7 / 815,9 / -10,5).
+// Tausender-Variante zuerst, aber nur wenn ein Trenner WIRKLICH folgt (Lookahead),
+// sonst greift sie "2014" als "201" ab.
+const NUMRE = '-?\\d{1,3}(?:[ .]\\d{3})+(?:,\\d+)?|-?\\d+(?:,\\d+)?';
 function numBeforeUnit(str, unit){
-  const m = str.match(new RegExp('(-?\\d[\\d.]*(?:,\\d+)?)\\s*'+unit,'i'));
+  const m = str.match(new RegExp('('+NUMRE+')\\s*'+unit,'i'));
   return m ? cleanNum(m[1]) : '';
 }
-function firstNum(s){ const m = String(s).match(/-?\d[\d.]*(?:,\d+)?/); return m ? cleanNum(m[0]) : ''; }
+function firstNum(s){ const m = String(s).match(new RegExp(NUMRE)); return m ? cleanNum(m[0]) : ''; }
 function cells(line){ return line.split(/\s{2,}/).map(c=>c.trim()).filter(Boolean); }
 function reText(text, re){ return (text.replace(/[ \t]+/g,' ').match(re) || [])[1] || ''; }
 
@@ -227,6 +233,16 @@ function byLabel(lines, labelRe, opt){
         const search = (rest+'  '+(cs[i+1]||'')+'  '+(cs[i+2]||'')+'  '+(cs[i+3]||'')+'  '+(cs[i+4]||'')).trim();
         if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (u!=='') return u; }
         const n = firstNum(rest) || firstNum(cs[i+1]) || firstNum(cs[i+2]); if (n!=='') return n;
+        // GEQ stellt manche Werte in die Zeile ÜBER das Label
+        if (opt.up && lines[l-1]){
+          const u2 = opt.unit ? numBeforeUnit(lines[l-1], opt.unit) : firstNum(lines[l-1]);
+          if (u2!=='') return u2;
+        }
+        // ArchiPHYSIK 25 stellt manche Werte in die Folgezeile (mit Einheit)
+        if (opt.down && lines[l+1]){
+          const u3 = opt.unit ? numBeforeUnit(lines[l+1], opt.unit) : firstNum(lines[l+1]);
+          if (u3!=='') return u3;
+        }
         continue;
       }
       let val = rest || cs[i+1] || '';
@@ -277,54 +293,228 @@ function extract(text){
   const lines = text.replace(/\r/g,'').split('\n');
   const r = {};
   r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?(?:Nr\.?|Zahl)|EA[- ]?Nr\.?|Ausweis[- ]?Nr\.?|EA[- ]?Zahl|Protokoll[- ]?Nr\.?/i, {max:20})
-                 || reText(text, /(?:Energieausweis|Ausweis|Protokoll)[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i);
-  r.ausgabe      = reText(text, /(?:OIB[- ]?)?(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
-                 || reText(text, /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /(?:Energieausweis|Ausweis|Protokoll)[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i)
+                 || reText(text, /^Nr\.\s*(\d{3,}[-\/]\d{1,4})/im);   // eawz: "Nr. 69373-1"
+  r.ausgabe      = reText(text, /Ausgabe:?\s*((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /(?:OIB[- ]?)?(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
                  || reText(text, /(?:Richtlinie|RL)\.?\s*6\s*(?:Ausgabe:?\s*)?((?:19|20)\d{2})/i);
-  r.adresse      = byLabel(lines, /\b(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse|Standort|Objekt)\b/i, {max:50});
-  r.plz_ort      = byLabel(lines, /PLZ\s*\/?\s*Ort/i, {max:40})
-                 || reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
+  r.adresse      = byLabel(lines, /\b(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse)\b/i, {max:50})
+                 || byLabel(lines, /\b(?:Standort|Objekt)\b/i, {max:50});
+  // alle "PLZ/Ort"-Treffer sammeln; bevorzuge den mit Bezirks-Bindestrich
+  // (Hauptseite "1220 Wien-Donaustadt" statt Deckblatt "1220/Wien").
+  {
+    const cands = [];
+    for (let l=0;l<lines.length;l++){
+      const cs = cells(lines[l]);
+      for (let i=0;i<cs.length;i++){
+        if (!/^PLZ\s*[\/,]?\s*Ort/i.test(cs[i])) continue;
+        let v = cs[i].replace(/^PLZ\s*[\/,]?\s*Ort\s*[:.]?\s*/i,'').trim();
+        // PLZ und Ort stehen evtl. in getrennten Zellen -> Folgezellen anhängen
+        for (let j=i+1; j<cs.length && j<=i+2; j++){
+          if (/KG-?N|Einlage|Seeh|Grundst|Katastr/i.test(cs[j])) break;
+          v = (v+' '+cs[j]).trim();
+          if (/\d{4}\s+\D/.test(v)) break;
+        }
+        v = v.replace(/\//g,' ').replace(/\s+/g,' ').slice(0,40).trim();
+        if (/\d{4}/.test(v)) cands.push(v);
+      }
+    }
+    r.plz_ort = cands.find(v=>/\d{4}\s+\S+-\S/.test(v)) || cands[0] || '';
+  }
+  if (!/\d{4}/.test(r.plz_ort)){
+    // getrennte Labels (Postleitzahl … / Ort …) zu "PLZ Ort" zusammensetzen
+    const plz = (byLabel(lines, /Postleitzahl/i, {max:10}).match(/\d{4}/)||[])[0] || '';
+    const ort = byLabel(lines, /\bOrt\b/i, {max:30});
+    if (plz) r.plz_ort = (plz+' '+ort).trim();
+  }
+  if (!/\d{4}/.test(r.plz_ort))
+    r.plz_ort = reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|Stra[ßs]e|Erbaut|Baujahr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
   r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28});
-  r.gstnr        = byLabel(lines, /Grundst[üu]cks?(?:nummer|nr)\.?/i, {max:18});
+  r.gstnr        = byLabel(lines, /Grundst[üu]cks?(?:nummer|nr)\.?(?:\(n\))?/i, {max:40});
   if (!/\d/.test(r.gstnr)) r.gstnr = '';
   r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
-  r.kategorie    = reText(text, /\b(Nichtwohngeb[äa]ude|Wohngeb[äa]ude|Einfamilienhaus|Mehrfamilienhaus|Bürogebäude)\b/i)
-                 || byLabel(lines, /Geb[äa]udekategorie/i, {max:30});
-  r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp/i, {max:30});
-  r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr/i, {num:true})
-                 || reText(text, /(?:Baujahr|Errichtungsjahr)\D{0,8}((?:18|19|20)\d{2})/i);
+  r.kategorie    = reText(text, /\b(Einfamilienhaus|Mehrfamilienhaus|Reihenhaus|B[üu]rogeb[äa]ude)\b/i)
+                 || (/Nicht-?Wohngeb[äa]ude/i.test(text) ? 'Nichtwohngebäude'
+                    : /\bWohngeb[äa]ude\b/i.test(text) ? 'Wohngebäude' : '');
+  r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp/i, {max:60})
+                     .replace(/\s*(Letzte Ver[äa]nderung|Baujahr|Letzte Ver).*$/i,'').trim();
+  r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr|Erbaut/i, {num:true})
+                 || reText(text, /(?:Baujahr|Errichtungsjahr|Erbaut)\D{0,8}((?:18|19|20)\d{2})/i);
   r.lueftung     = byLabel(lines, /Art der L[üu]ftung|L[üu]ftung\b/i, {max:28});
+  if (!r.lueftung || /Hüllfl|^\d/.test(r.lueftung))   // GEQ: Wert steht z.T. über dem Label
+    r.lueftung   = reText(text, /\b(RLT (?:mit|ohne) WRG|Fensterl[üu]ftung|kontrollierte? Wohnrauml[üu]ftung|mechanische L[üu]ftung)\b/i) || r.lueftung;
   r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²'});
-  r.bezugsflaeche= byLabel(lines, /Bezugsfl[äa]che|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²'});
-  r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto-?Volumen/i, {num:true, unit:'m³'});
-  r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m'});
-  r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true});
-  r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true});
-  r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:14});
+  r.bezugsflaeche= byLabel(lines, /Bezugs-?(?:fl[äa]che|Grundfl[äa]che)|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²', down:true});
+  r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto[- ]?Volumen/i, {num:true, unit:'m³', down:true});
+  r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m', up:true, down:true});
+  r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true, unit:'1\\/m'});
+  r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true, unit:'W\\/m', down:true});
+  r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:20})
+                   .replace(/\s*(mittlerer|Bauweise|Heiztage|Heizgradtage|Norm|Art der|Soll-|Photovoltaik).*$/i,'').trim();
   r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m'});
   r.heizgradtage = byLabel(lines, /Heizgradtage/i, {num:true, unit:'K'});
-  r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C'});
+  r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C', down:true});
   r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d'});
-  r.hwb    = metric(lines, /\bHWB(?:Ref|-?ref|RK|-?RK|T)?\.?\b/i);
-  r.hwb_sk = metricSK(lines, 'HWB');
-  r.wwwb   = metric(lines, /\bWWWB\b/i);
-  r.heb    = metric(lines, /\bHEB\b/i);
-  r.hteb   = metric(lines, /\bHTEB(?:-RH)?\b/i);
-  r.eeb    = metric(lines, /\bEEB\b/i);
-  r.eeb_sk = metricSK(lines, 'EEB');
-  r.peb    = metric(lines, /\bPEB\b/i);
-  r.peb_sk = metricSK(lines, 'PEB');
-  r.co2    = metric(lines, /\bCO2\b/i, 'kg');
-  r.co2_sk = metricSK(lines, 'CO2');
-  r.lek    = reText(text, /LEK[T]?\s*-?\s*Wert\D{0,15}(\d{1,3}(?:,\d+)?)/i);
+  // -- Energie-Kennzahlen --------------------------------------------------
+  // GEQ-Layout trennt Referenzklima (RK) und Standortklima (SK) in Blöcke und
+  // hängt die Index-Suffixe (SK / RK / Ref,SK) z.T. in die Folgezeile. Wir
+  // ankern an der deutschen Bezeichnung + dem spezifischen kWh/m²a-Wert und
+  // routen über den Block-Kontext (welcher Klima-Abschnitt) bzw. das Suffix.
+  const SEC_SK = /WÄRME-?\s*UND ENERGIEBEDARF|AM (?:GEBÄUDE)?STANDORT|Standortklima|am Gebäudestandort/i;
+  const SEC_RK = /ANFORDERUNGEN|Referenzklima|fiktiven Referenzstandort/i;
+  // aktueller Block je Zeile vorberechnen (SK ist Default, RK schaltet um)
+  const sec = [];
+  let cur = 'SK';
+  for (const ln of lines){ if (SEC_RK.test(ln)) cur='RK'; else if (SEC_SK.test(ln)) cur='SK'; sec[sec.length]=cur; }
+
+  // letzter spezifischer kWh/m²a-Wert auf einer Zeile (das ist der spez. Bedarf,
+  // nicht die absolute kWh/a-Zahl davor)
+  function specOnLine(line, unit){
+    unit = unit || 'kWh\\/m²a';
+    // erster Wert mit Einheit = der reale Bedarf; spätere Spalten sind
+    // Anforderung/Referenz (klassische Tabellen führen die Anforderung rechts).
+    const m = line.match(new RegExp('('+NUMRE+')\\s*'+unit,'i'));
+    if (m) return cleanNum(m[1]);
+    const sc = shortCommas(line); return sc.length ? cleanNum(sc[0]) : '';
+  }
+  // Wert über deutsche Bezeichnung (labelRe) holen; opt.section filtert RK/SK,
+  // opt.suffix verlangt zusätzlich ein Index-Suffix (auf Zeile oder Folgezeile).
+  function byGerman(labelRe, opt){
+    opt = opt || {};
+    for (let l=0;l<lines.length;l++){
+      if (!labelRe.test(lines[l])) continue;
+      if (opt.section && sec[l]!==opt.section) continue;
+      if (opt.suffix && !opt.suffix.test(lines[l]) && !opt.suffix.test(lines[l+1]||'')) continue;
+      if (opt.notSuffix && (opt.notSuffix.test(lines[l]) || opt.notSuffix.test((lines[l+1]||'').trim().slice(0,12)))) continue;
+      let scope = lines[l];
+      // GEQ-Anforderungszeile: "<dt.Label> 49,7 ...erfüllt  HWB 35,9" -> Wert nach
+      // der Abkürzung ist der Bedarfswert (links steht die Anforderungsgrenze).
+      if (opt.afterAbbr){ const ai = scope.search(opt.afterAbbr); if (ai>=0) scope = scope.slice(ai); }
+      // ArchiPHYSIK stellt den Wert z.T. in die Zeile ÜBER das Label.
+      // Folgezeile nur nutzen, wenn sie nicht selbst eine andere Kennzahl ist.
+      const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar/i.test(lines[l+1]||'');
+      const v = specOnLine(scope, opt.unit)
+             || (opt.up ? specOnLine(lines[l-1]||'', opt.unit) : '')
+             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit) : '');
+      if (v!=='' && v!=='k.A.') return v;
+    }
+    return '';
+  }
+  // Wert direkt NEBEN einer Abkürzung (HWBRef,RK / HWB SK …). GEQ schreibt den
+  // Bedarfswert rechts der Abkürzung, ArchiPHYSIK links davon. Nimm den nächsten
+  // einheitsbehafteten Wert auf einer der beiden Seiten (im gewünschten Block).
+  function byAbbrAdjacent(abbrRe, opt){
+    opt = opt || {}; const unit = opt.unit || 'kWh\\/m²a';
+    const vre = new RegExp('('+NUMRE+')\\s*'+unit,'i');
+    for (let l=0;l<lines.length;l++){
+      const ai = lines[l].search(abbrRe); if (ai<0) continue;
+      if (opt.section && sec[l]!==opt.section) continue;
+      const right = lines[l].slice(ai).match(vre);
+      if (right) return cleanNum(right[1]);
+      const leftPart = lines[l].slice(0,ai);
+      const lefts = leftPart.match(new RegExp(vre.source,'ig'));
+      if (lefts) return cleanNum((lefts[lefts.length-1].match(vre)||[])[1]);
+      // Wert in der Folge- bzw. Vorzeile (ArchiPHYSIK: "HEB SK=" \n "… 53,1kWh/m²a")
+      const below = (lines[l+1]||'').match(vre); if (below) return cleanNum(below[1]);
+      const above = (lines[l-1]||'').match(vre); if (above) return cleanNum(above[1]);
+    }
+    return '';
+  }
+  // Abkürzungs-Fallback (alte klassische Tabellen ohne dt. Langlabel)
+  function byAbbr(abbrRe, unit){
+    for (let l=0;l<lines.length;l++){
+      if (!abbrRe.test(lines[l])) continue;
+      const v = specOnLine(lines[l], unit); if (v!=='') return v;
+    }
+    return '';
+  }
+
+  // HWB: Hauptspalte = Heizwärmebedarf im Standortklima (realer Bedarf).
+  r.hwb        = byGerman(/Heizw[äa]rmebedarf/i, {section:'SK', notSuffix:/Referenz|Ref/i})
+              || byGerman(/HWB\s*\(?\s*Q/i, {})   // eawz: "HWB (Qh,a,SK)"
+              || byAbbr(/\bHWB\b(?!.*Ref)/i);
+  r.hwb_rk     = byGerman(/Heizw[äa]rmebedarf/i, {section:'RK', notSuffix:/Referenz|Ref/i});
+  r.hwb_ref_sk = byAbbrAdjacent(/HWB\s*Ref\.?,?\s*SK/i, {section:'SK'})
+              || byGerman(/Referenz-?Heizw[äa]rmebedarf/i, {section:'SK', afterAbbr:/\bHWB\b/});
+  r.hwb_ref_rk = byAbbrAdjacent(/HWB\s*Ref\.?,?\s*RK/i, {section:'RK'})
+              || byGerman(/Referenz-?Heizw[äa]rmebedarf/i, {section:'RK', afterAbbr:/\bHWB\b/});
+  r.wwwb   = byGerman(/Warmwasserw[äa]rmebedarf/i, {}) || byAbbr(/\bWWWB\b/i);
+  r.heb    = byAbbrAdjacent(/\bHEB\s*SK\b/i, {section:'SK'})
+          || byGerman(/Heizenergiebedarf/i, {section:'SK', notSuffix:/Referenz/i, up:true})
+          || byAbbr(/\bHEB\b/i);
+  r.hteb   = byAbbr(/\bHTEB(?:-?RH)?\b/i);
+  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i}) || byAbbr(/\bEEB\b(?!.*RK)/i);
+  r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i});
+  r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK'})
+          || byGerman(/Prim[äa]renergiebedarf\b/i, {})
+          || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i);
+  r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
+          || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
+          || byAbbr(/\bCO[2,]/i, 'kg\\/m²a');   // OCR: "CO," statt "CO2"
+  r.lek    = reText(text, /LEK\s*(?:T|\+;?)?\s*-?\s*Wert\D{0,15}(\d{1,3}(?:,\d+)?)/i);
   const fg = text.replace(/[ \t]+/g,' ');
-  r.fgee        = (fg.match(/\bfGEE\b[^\n]{0,30}?([01],\d{1,3})/i)||[])[1] || '';
-  r.fgee_klasse = (fg.match(/\bfGEE\b[^\n]{0,18}?\(?([A-G]\+{0,2})\)/i)||[])[1] || '';
-  r.hwb_klasse  = (fg.match(/HWB[\s\-]*Klasse[^A-G]{0,8}([A-G]\+{0,2})/i)||[])[1] || '';
-  r.ausstelldatum = reText(text, /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt am|Ausstellung)\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i)
-                 || reText(text, /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt am)\D{0,8}(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i);
-  r.gueltig_bis = reText(text, /G[üu]ltig(?:keit)?\s*bis\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i);
+  // eawz/Vorarlberg-Layout: saubere Inserat-/Förderungs-Kennzahlen überschreiben
+  // die unsicheren Stapel-Spalten. Greifen nur, wenn diese Labels vorkommen.
+  if (/AUSWEISUNG IN INSERATEN|F[ÖO]RDERANSUCHEN/i.test(text)){
+    const ez = (re)=>{ const m=fg.match(re); return m?cleanNum(m[1]):''; };
+    const inserat = ez(/\bHWB\b\s*([0-3]?\d,\d{1,2})\s*kWh\/m²a/i);   // "HWB 31,5 kWh/m²a (B)"
+    if (inserat) r.hwb = inserat;
+    r.hwb_rk     = ez(/HWB\s*RK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_rk;
+    r.hwb_ref_rk = ez(/HWB\s*Ref\.?,?\s*RK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_ref_rk;
+    r.hwb_ref_sk = ez(/HWB\s*Ref\.?,?\s*SK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_ref_sk;
+    r.peb        = ez(/PEB\s*SK\s*([0-9]{1,3},\d{1,2})/i) || r.peb;
+    r.co2        = ez(/CO\s*2?\s*SK\s*([0-9]{1,3},\d{1,2})/i) || r.co2;
+    // Klassen: Label (HWB/fGEE) und "wert (Klasse)" stehen in getrennten Zeilen
+    for (let l=0;l<lines.length;l++){
+      const kl = (lines[l].match(/^\s*[\d.,]+\s*(?:kWh\/m²a)?\s*\(([A-G]\+{0,2})\)\s*$/)||[])[1];
+      if (!kl) continue;
+      const lbl = (lines[l-1]||'')+' '+lines[l];
+      if (/\bHWB\b/.test(lbl) && !r.hwb_klasse) r.hwb_klasse = kl;
+      else if (/f\s*GEE/i.test(lbl) && !r.fgee_klasse) r.fgee_klasse = kl;
+    }
+  }
+  // fGEE: Token oft "f GEE" / "f\nGEE" / "fGEE,SK". SK bevorzugt, RK separat.
+  function fgeeIn(section){ // section: 'SK' | 'RK' | 'any'
+    for (let l=0;l<lines.length;l++){
+      if (!/f\s*GEE|fGEE|Gesamtenergieeffizienz-?Faktor/i.test(lines[l])) continue;
+      if (/:\s*Der\b/.test(lines[l])) continue;            // Erläuterungstext "fGEE: Der ..."
+      if (section!=='any' && sec[l]!==section) continue;
+      const blob = lines[l]+' '+(lines[l+1]||'');
+      const all = blob.match(/(?<![\d.,])[0-4],\d{1,3}(?!\d)/g);
+      if (!all) continue;
+      // "0,900  0,817" (Anforderung + Ist) -> Ist = letzter Wert. Sonst einziger.
+      return cleanNum(all[all.length-1]);
+    }
+    return '';
+  }
+  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?([0-4],\d{1,3})/i)||[])[1] || '' ;
+  // ETU/Vatter-Layout: fGEE-Zeile ohne Token, nur "=  0,71  0,74" (SK  Anforderung)
+  if (!r.fgee && /GESAMTENERGIEEFFIZIENZ-?FAKTOR/i.test(text)){
+    for (const ln of lines){ const m = ln.match(/^\s*=\s*([0-3],\d{2})\s+[0-3],\d{2}\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
+  }
+  r.fgee_rk  = fgeeIn('RK');
+  if (r.fgee_rk && r.fgee_rk===r.fgee) r.fgee_rk='';
+  r.fgee_klasse = r.fgee_klasse || (fg.match(/f\s*GEE[^\n]{0,30}?\(([A-G]\+{0,2})\)/i)||[])[1] || '';
+  r.hwb_klasse  = r.hwb_klasse  || (fg.match(/\bHWB\b[^\n]{0,30}?\(([A-G]\+{0,2})\)/i)||[])[1] || '';
+  const DATE = /(\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4})/;
+  // Datum: zuerst neben dem Label, sonst (eawz) in der Folgezeile suchen
+  function dateNear(labelRe){
+    for (let l=0;l<lines.length;l++){
+      if (!labelRe.test(lines[l])) continue;
+      const m = lines[l].match(DATE) || (lines[l+1]||'').match(DATE) || (lines[l+2]||'').match(DATE);
+      if (m) return m[1];
+    }
+    return '';
+  }
+  r.ausstelldatum = (reText(text, /(?:Ausstellungsdatum|Ausstelldatum|Erstelldatum|Ausgestellt am|Ausstellung)\s*[: ]*\s?(\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4})/i)
+                 || reText(text, /(?:Ausstellungsdatum|Erstelldatum|Ausgestellt am)\D{0,8}(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i)
+                 || dateNear(/Ausstellungsdatum|Ausstelldatum|Erstelldatum/i));
+  r.ausstelldatum = r.ausstelldatum.replace(/\.\s+/g,'.');
+  r.gueltig_bis = reText(text, /G[üu]ltig(?:keitsdatum|keit)?\s*(?:bis)?\s*[: ]*\s?(\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4})/i)
+               || reText(text, /G[üu]ltig(?:keit)?\s*bis\D{0,8}(\d{1,2}[.\/]\s?\d{1,2}[.\/]\s?\d{2,4})/i)
+               || dateNear(/G[üu]ltig(?:keit)?\s*bis|G[üu]ltigkeitsdatum/i);
+  r.gueltig_bis = r.gueltig_bis.replace(/\.\s+/g,'.'); // "1. 1. 2027" -> "1.1.2027"
   r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:40});
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }

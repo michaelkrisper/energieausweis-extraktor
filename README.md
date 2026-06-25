@@ -34,18 +34,25 @@ Einlagezahl · Gebäudekategorie · Nutzungsprofil · Baujahr · Lüftung.
 **Geometrie/Standort:** Brutto-Grundfläche · kond./Bezugsfläche · Brutto-Volumen · charakt. Länge lc ·
 Kompaktheit A/V · mittl. U-Wert · Klimaregion · Seehöhe · Heizgradtage · Norm-Außentemperatur · Heiztage.
 
-**Energie-Kennzahlen** (spezifisch kWh/m²a; RK = Referenz-, SK = Standortklima):
-HWB · HWB SK · HWB-Klasse · WWWB · HEB · HTEB · EEB · EEB SK · PEB · PEB SK · fGEE · fGEE-Klasse ·
-CO₂ · CO₂ SK · **LEK-Wert** (ältere Ausweise).
+**Energie-Kennzahlen** (spezifisch kWh/m²a; SK = Standortklima = realer Bedarf am Standort,
+RK = Referenzklima, Ref = Referenz-Heizwärmebedarf):
+HWB (SK) · HWB RK · HWB Ref,SK · HWB Ref,RK · HWB-Klasse · WWWB · HEB · HTEB · EEB (SK) · EEB RK ·
+PEB (SK) · fGEE · fGEE RK · fGEE-Klasse · CO₂ (SK) · **LEK-Wert** (ältere Ausweise).
+
+> Die Hauptspalten (HWB, EEB, PEB, CO₂, fGEE) führen den **Standortklima-Wert** — die Zahl, die groß
+> am Ausweis steht und für Inserate/Klasse gilt. RK- und Ref-Varianten stehen in eigenen Spalten, wo
+> der Ausweis sie ausweist; sonst bleiben sie leer.
 
 **Abschluss:** Ausstelldatum · Gültig bis · Aussteller · Pfad.
 
 ## Robustheit / getestet
 
-Gegen echte Muster mehrerer Aussteller-Programme und Ausgaben geprüft (GEQ, eawz, ILS ZT (Gleisdorf/Stmk),
-e-s-e, FIBY ZT, klimafonds), Baujahre der Dokumente 2010–2024. Zwei Layout-Familien werden abgedeckt:
-klassische Tabellen (GEQ/e-s-e, inkl. LEK) und moderne OIB-2015+-Kennwertblöcke (eawz). Pro Muster
-werden je nach Ausgabe ~21–32 der 40 Felder automatisch befüllt.
+Gegen einen Korpus echter PDFs mit handgelesenen Soll-Werten geprüft (`test/samples/`, committet) —
+**alle Felder grün** (`node test/validate.js test/samples` → 100 %). Abgedeckt sind vier OIB-Ausgaben
+(**2011 / 2015 / 2019 / 2023**), mehrere Aussteller-Programme (ETU Gebäudeprofi, GEQ, ArchiPHYSIK 13/25,
+eawz Vorarlberg, FIBY/AEE) sowie Wohn- **und** Nicht-Wohngebäude. Drei Layout-Familien:
+klassische Tabellen (inkl. LEK), GEQ-/ArchiPHYSIK-Kennwertblöcke mit getrennten RK/SK/Ref-Spalten,
+und das eawz-Vorarlberg-Formular. Details/Tabelle: siehe [TESTING.md](TESTING.md).
 
 **Funktionsweise:** pdf.js rekonstruiert aus den 2D-Textpositionen layouttreue Zeilen; Spalten werden an
 größeren Lücken getrennt. Energie-Kennzahlen werden über den spezifischen kWh/m²a-Wert erkannt,
@@ -76,8 +83,13 @@ Bibliotheken in `vendor/` (committet, damit der Build offline reproduzierbar ist
 ### Erkennung anpassen
 Die Extraktions-Engine steht in `src/app.template.html`:
 - **`COLUMNS`** — Spaltensatz (Reihenfolge = Excel-Reihenfolge).
-- **`extract()`** — pro Feld ein Aufruf: `byLabel(...)` (Label→Wert-Zelle), `metric(...)`
-  (Energie-Kennzahl), oder ein direkter Regex.
+- **`extract()`** — pro Feld ein Aufruf. Extraktions-Bausteine:
+  - `byLabel(...)` — Label-Zelle → Wert (auch Zeile darüber/darunter via `up`/`down`).
+  - `byGerman(...)` — Energie-Kennzahl über die deutsche Bezeichnung + Klima-Block (RK/SK).
+  - `byAbbrAdjacent(...)` — Wert direkt neben einer Abkürzung (HWB SK / HWBRef,RK …), egal ob
+    links (ArchiPHYSIK) oder rechts (GEQ).
+  - `metric(...)`/`byAbbr(...)` bzw. ein direkter Regex für den Rest.
 - **`isEnergieausweis()`** — Schwelle, ab der eine Datei als Ausweis gilt (sonst übersprungen).
 
-Neuen Aussteller-Stil ergänzen → `python3 build.py` → neu testen.
+Neuen Aussteller-Stil ergänzen → Soll-Fixture anlegen → `python3 build.py` →
+`node test/validate.js test/samples` muss grün bleiben (siehe [TESTING.md](TESTING.md)).
