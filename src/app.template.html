@@ -217,22 +217,22 @@ function reText(text, re){ return (text.replace(/[ \t]+/g,' ').match(re) || [])[
 function byLabel(lines, labelRe, opt){
   opt = opt || {};
   const max = opt.max || 40;
-  for (const raw of lines){
+  for (let l=0; l<lines.length; l++){
+    const raw = lines[l];
     const cs = cells(raw);
     for (let i=0;i<cs.length;i++){
       const mm = cs[i].match(labelRe); if (!mm) continue;
-      // Trenner abstreifen, ABER ein Minus vor einer Ziffer (negative Temperatur) erhalten.
       const rest = cs[i].slice(mm.index+mm[0].length).replace(/^[\s:|=()]+/,'').replace(/^[.\-]+(?=\D)/,'').trim();
-      const next = cs[i+1]||'', next2 = cs[i+2]||'';
       if (opt.num){
-        const search = (rest+'  '+next+'  '+next2).trim();
+        const search = (rest+'  '+(cs[i+1]||'')+'  '+(cs[i+2]||'')+'  '+(cs[i+3]||'')+'  '+(cs[i+4]||'')).trim();
         if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (u!=='') return u; }
-        const n = firstNum(rest) || firstNum(next); if (n!=='') return n;
+        const n = firstNum(rest) || firstNum(cs[i+1]) || firstNum(cs[i+2]); if (n!=='') return n;
         continue;
       }
-      let val = rest || next;
-      if (/^(laut|gem|nach|gem[äa][ßs])\b/i.test(val) && next) val = next; // "Gebäudekategorie laut WBF"
-      if (/^\d{4}$/.test(val) && next2 && /^[A-ZÄÖÜ]/.test(next2)) val = val+' '+next2; // PLZ + Ort getrennt
+      let val = rest || cs[i+1] || '';
+      if (!val && lines[l+1]) val = cells(lines[l+1])[0] || ''; // Wert in Zeile darunter
+      if (/^(laut|gem|nach|gem[äa][ßs])\b/i.test(val) && cs[i+1]) val = cs[i+1];
+      if (/^\d{4}$/.test(val) && cs[i+2] && /^[A-ZÄÖÜ]/.test(cs[i+2])) val = val+' '+cs[i+2];
       if (val) return val.slice(0,max).trim();
     }
   }
@@ -240,13 +240,18 @@ function byLabel(lines, labelRe, opt){
 }
 
 // Energie-Kennzahl: erste Zeile mit Abkürzung UND echtem Wert (short-comma oder Zahl vor Einheit).
-// Reine Definitions-/Überschriftzeilen (ohne Zahl) werden so übersprungen.
 function metric(lines, abbrRe, unit){
   unit = unit || 'kWh\\/m²a';
-  for (const raw of lines){
+  for (let l=0; l<lines.length; l++){
+    const raw = lines[l];
     if (!abbrRe.test(raw)) continue;
-    const sc = shortCommas(raw); if (sc.length) return cleanNum(sc[0]);
-    const u = numBeforeUnit(raw, unit); if (u!=='') return u;
+    let sc = shortCommas(raw); if (sc.length) return cleanNum(sc[0]);
+    let u = numBeforeUnit(raw, unit); if (u!=='') return u;
+    // Falls Label alleine steht: nächste Zeile prüfen
+    if (lines[l+1] && !/^[A-Z]/.test(lines[l+1].trim())){
+      sc = shortCommas(lines[l+1]); if (sc.length) return cleanNum(sc[0]);
+      u = numBeforeUnit(lines[l+1], unit); if (u!=='') return u;
+    }
   }
   return '';
 }
@@ -262,7 +267,7 @@ function isEnergieausweis(text){
   if (/energieausweis/.test(t)) s += 2;
   if (/heizw[äa]rmebedarf|\bhwb\b/.test(t)) s++;
   if (/gesamtenergieeffizienz|\bfgee\b/.test(t)) s++;
-  if (/oib[\s\-]?richtlinie\s*6|prim[äa]renergie|\bpeb\b/.test(t)) s++;
+  if (/oib[\s\-]?richtlinie\s*6|prim[äa]renergie|\bpeb\b|eavg\b|gebäude-kenndaten/i.test(t)) s++;
   if (/kwh\/m²a|kwh\/m2a/.test(t)) s++;
   return s >= 2;
 }
@@ -271,22 +276,22 @@ function extract(text){
   text = text.replace(/[−–‐‑]/g,'-'); // Unicode-Minus/Bindestriche -> ASCII '-'
   const lines = text.replace(/\r/g,'').split('\n');
   const r = {};
-  r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?Nr\.?|EA[- ]?Nr\.?/i, {max:20})
-                 || reText(text, /Energieausweis[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i);
-  r.ausgabe      = reText(text, /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
-                 || reText(text, /(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
-                 || reText(text, /(?:Richtlinie|RL)\.?\s*6[^\n]{0,25}?((?:19|20)\d{2})/i);
-  r.adresse      = byLabel(lines, /(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaft|Adresse)/i, {max:50});
+  r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?(?:Nr\.?|Zahl)|EA[- ]?Nr\.?|Ausweis[- ]?Nr\.?|EA[- ]?Zahl|Protokoll[- ]?Nr\.?/i, {max:20})
+                 || reText(text, /(?:Energieausweis|Ausweis|Protokoll)[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i);
+  r.ausgabe      = reText(text, /(?:OIB[- ]?)?(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /Ausgabe\s+((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
+                 || reText(text, /(?:Richtlinie|RL)\.?\s*6\s*(?:Ausgabe:?\s*)?((?:19|20)\d{2})/i);
+  r.adresse      = byLabel(lines, /\b(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse|Standort|Objekt)\b/i, {max:50});
   r.plz_ort      = byLabel(lines, /PLZ\s*\/?\s*Ort/i, {max:40})
-                 || reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
+                 || reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
   r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28});
   r.gstnr        = byLabel(lines, /Grundst[üu]cks?(?:nummer|nr)\.?/i, {max:18});
   if (!/\d/.test(r.gstnr)) r.gstnr = '';
   r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
-  r.kategorie    = reText(text, /\b(Nichtwohngeb[äa]ude|Wohngeb[äa]ude)\b/i)
+  r.kategorie    = reText(text, /\b(Nichtwohngeb[äa]ude|Wohngeb[äa]ude|Einfamilienhaus|Mehrfamilienhaus|Bürogebäude)\b/i)
                  || byLabel(lines, /Geb[äa]udekategorie/i, {max:30});
-  r.nutzungsprofil = byLabel(lines, /Nutzungsprofil/i, {max:30});
+  r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp/i, {max:30});
   r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr/i, {num:true})
                  || reText(text, /(?:Baujahr|Errichtungsjahr)\D{0,8}((?:18|19|20)\d{2})/i);
   r.lueftung     = byLabel(lines, /Art der L[üu]ftung|L[üu]ftung\b/i, {max:28});
