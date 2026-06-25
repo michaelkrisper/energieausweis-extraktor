@@ -1,9 +1,8 @@
-# GBG · Energieausweis-Extraktor
+# Energieausweis-Extraktor
 
-Liest österreichische **Energieausweis-PDFs** (Fokus **Steiermark / Graz & Umgebung**, GBG- bzw.
-Stadt-Graz-Gebäude) rekursiv aus einem Ordnerbaum, extrahiert möglichst **viele** OIB-Kennwerte und
-exportiert alles vereinheitlicht nach **Excel** — komplett **lokal im Browser**, kein Server, keine
-Installation, keine Daten verlassen den Rechner.
+Liest österreichische **Energieausweis-PDFs** rekursiv aus einem Ordnerbaum, extrahiert möglichst
+**viele** OIB-Kennwerte und exportiert alles vereinheitlicht nach **Excel** — komplett **lokal im
+Browser**, kein Server, keine Installation, keine Daten verlassen den Rechner.
 
 ## Benutzung (für Anwender)
 

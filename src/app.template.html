@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GBG · Energieausweis-Extraktor</title>
+<title>Energieausweis-Extraktor</title>
 <style>
   :root{
-    --gbg-blue:#165f83;
-    --gbg-blue-light:#237ca8;
-    --gbg-blue-dark:#0f4660;
+    --ea-blue:#165f83;
+    --ea-blue-light:#237ca8;
+    --ea-blue-dark:#0f4660;
     --ok:#2e7d32;
     --warn:#b25b00;
     --manuell:#a94442;
@@ -21,12 +21,12 @@
     color:#1d2b35;background:var(--bg);font-size:14px;
   }
   header{
-    background:var(--gbg-blue);color:#fff;padding:14px 22px;
+    background:var(--ea-blue);color:#fff;padding:14px 22px;
     display:flex;align-items:center;gap:16px;box-shadow:0 2px 6px rgba(0,0,0,.15);
   }
   header .logo{
     font-weight:800;font-size:22px;letter-spacing:.5px;
-    background:#fff;color:var(--gbg-blue);padding:4px 10px;border-radius:4px;
+    background:#fff;color:var(--ea-blue);padding:4px 10px;border-radius:4px;
   }
   header h1{font-size:17px;font-weight:600;margin:0}
   header .sub{font-size:12px;opacity:.85;margin-top:2px}
@@ -36,11 +36,11 @@
   }
   button{
     font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
-    border:none;border-radius:5px;padding:9px 16px;color:#fff;background:var(--gbg-blue);
+    border:none;border-radius:5px;padding:9px 16px;color:#fff;background:var(--ea-blue);
     transition:background .15s;
   }
-  button:hover{background:var(--gbg-blue-dark)}
-  button.secondary{background:#fff;color:var(--gbg-blue);border:1px solid var(--gbg-blue)}
+  button:hover{background:var(--ea-blue-dark)}
+  button.secondary{background:#fff;color:var(--ea-blue);border:1px solid var(--ea-blue)}
   button.secondary:hover{background:#eef4f8}
   button:disabled{background:#9bb3c0;cursor:not-allowed}
   .filterbox input,.filterbox select{
@@ -50,26 +50,26 @@
   .pill{padding:3px 10px;border-radius:12px;font-weight:600}
   .pill.ok{background:#e3f1e4;color:var(--ok)}
   .pill.manuell{background:#f7e3e3;color:var(--manuell)}
-  .pill.total{background:#e4eef4;color:var(--gbg-blue)}
+  .pill.total{background:#e4eef4;color:var(--ea-blue)}
   .pill.skip{background:#eceff1;color:#607d8b}
   #progress{height:6px;background:#dde5ea;border-radius:3px;overflow:hidden;margin-bottom:14px;display:none}
-  #progress>div{height:100%;width:0;background:var(--gbg-blue-light);transition:width .2s}
+  #progress>div{height:100%;width:0;background:var(--ea-blue-light);transition:width .2s}
   .note{font-size:12.5px;color:#5a6b78;margin:6px 0 14px;line-height:1.5}
   .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;max-height:calc(100vh - 250px)}
   table{border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap}
   thead th{
-    position:sticky;top:0;background:var(--gbg-blue);color:#fff;font-weight:600;
+    position:sticky;top:0;background:var(--ea-blue);color:#fff;font-weight:600;
     padding:8px 10px;text-align:left;border-right:1px solid rgba(255,255,255,.15);z-index:2;
   }
   thead th:first-child{position:sticky;left:0;z-index:3}
   tbody td{padding:6px 10px;border-bottom:1px solid #eef1f4;border-right:1px solid #f1f4f6}
-  tbody td[contenteditable]:focus{outline:2px solid var(--gbg-blue-light);background:#fbfdff}
+  tbody td[contenteditable]:focus{outline:2px solid var(--ea-blue-light);background:#fbfdff}
   tbody tr:hover td{background:#f7fafc}
   td.status{font-weight:700}
   tr.s-ok td.status{color:var(--ok)}
   tr.s-manuell td.status{color:var(--manuell)}
   tr.s-manuell{background:#fdf6f6}
-  td.file{position:sticky;left:0;background:#fff;font-weight:600;color:var(--gbg-blue);max-width:240px;overflow:hidden;text-overflow:ellipsis}
+  td.file{position:sticky;left:0;background:#fff;font-weight:600;color:var(--ea-blue);max-width:240px;overflow:hidden;text-overflow:ellipsis}
   tr:hover td.file{background:#f7fafc}
   .empty{padding:50px;text-align:center;color:#7a8794}
   code{background:#eef1f4;padding:1px 5px;border-radius:3px;font-size:12px}
@@ -78,7 +78,7 @@
 </head>
 <body>
 <header>
-  <span class="logo">GBG</span>
+  <span class="logo">EA</span>
   <div>
     <h1>Energieausweis-Extraktor</h1>
     <div class="sub">PDF → Excel · läuft lokal im Browser · keine Daten verlassen den Rechner</div>
