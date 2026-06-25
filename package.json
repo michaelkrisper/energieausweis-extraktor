@@ -1,0 +1,14 @@
+{
+  "name": "gbg-energieausweis-extraktor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lokales HTML-Tool: extrahiert OIB-Kennwerte aus österr. Energieausweis-PDFs nach Excel (offline)",
+  "scripts": {
+    "build": "python3 build.py",
+    "validate": "node test/validate.js"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "3.11.174"
+  },
+  "comment": "Die ausgelieferte dist/index.html braucht KEINE Dependencies. pdfjs-dist ist nur fürs Dev-Test-Harness (test/validate.js) auf dem Entwickler-Rechner."
+}
