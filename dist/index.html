@@ -681,14 +681,15 @@ function updateStats(){
 document.getElementById('search').addEventListener('input',render);
 document.getElementById('statusFilter').addEventListener('change',render);
 
-// ---- Ordner rekursiv einlesen — nur Teilbäume unter einem Ordner mit "ENERGIE" im Namen ----
+// ---- Ordner rekursiv einlesen — PDF wird genommen, wenn "energie" irgendwo im Pfad steht
+//      (Ordner-Vorfahr ODER Dateiname; case-insensitiv) ----
 const ENERGIE_RE = /energie/i;
 async function* walk(dirHandle, prefix='', inEnergie=false){
   for await (const [name, handle] of dirHandle.entries()){
     const path = prefix ? prefix+'/'+name : name;
     if (handle.kind==='directory'){
       yield* walk(handle, path, inEnergie || ENERGIE_RE.test(name));
-    } else if (inEnergie && name.toLowerCase().endsWith('.pdf')){
+    } else if ((inEnergie || ENERGIE_RE.test(path)) && name.toLowerCase().endsWith('.pdf')){
       yield {handle, path};
     }
   }
@@ -749,8 +750,24 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   const list=[];
   for await (const f of walk(dir, '', ENERGIE_RE.test(dir.name))) list.push(f);
 
+  // Parallel lesen: K Dateien gleichzeitig holen+parsen. Netz-Latenz (SMB/Netzlaufwerk) wird
+  // überlappt statt addiert -> auf Netzlaufwerken oft um ein Vielfaches schneller. Ergebnisse
+  // werden nach Original-Index abgelegt, damit DATA-Reihenfolge deterministisch (= Scan-Reihenfolge) bleibt.
+  const READ_CONCURRENCY = 6;
   DATA=[]; SKIPPED=0;
-  for (let i=0;i<list.length;i++){
+  const results = new Array(list.length);   // pro i: row-Objekt | null (übersprungen) | leer (offen)
+  let done = 0, next = 0;
+
+  function rebuild(){
+    DATA = []; SKIPPED = 0;
+    for (const r of results){
+      if (r === undefined) continue;        // noch nicht fertig
+      if (r === null) { SKIPPED++; continue; }
+      DATA.push(r);
+    }
+  }
+
+  async function processOne(i){
     const {handle, path} = list[i];
     const row = {datei:handle.name, pfad:path, status:''};
     try{
@@ -761,10 +778,10 @@ document.getElementById('pick').addEventListener('click', async ()=>{
       if (charsPerPage < 60){
         // Kein Textlayer -> gescannt. In ENERGIE-Ordnern vermutlich ein Ausweis -> manuell, nicht skippen.
         row.status = 'MANUELL · kein Text (Scan?)';
-        DATA.push(row);
+        results[i] = row;
       } else if (!isEnergieausweis(text)){
         // Hat Text, ist aber offensichtlich kein Energieausweis -> überspringen.
-        SKIPPED++;
+        results[i] = null;
       } else {
         Object.assign(row, extract(text));
         const got = KENNZAHLEN.filter(k=>row[k]).length;
@@ -773,15 +790,22 @@ document.getElementById('pick').addEventListener('click', async ()=>{
         } else {
           row.status = 'OK · '+got+' Kennzahlen';
         }
-        DATA.push(row);
+        results[i] = row;
       }
     }catch(err){
       row.status = 'MANUELL · Lesefehler ('+(err.message||err)+')';
-      DATA.push(row);
+      results[i] = row;
     }
-    progBar.style.width = Math.round(((i+1)/list.length)*100)+'%';
-    if (i % 5 === 0) render();
+    done++;
+    progBar.style.width = Math.round((done/list.length)*100)+'%';
+    if (done % 5 === 0){ rebuild(); render(); }
   }
+
+  async function worker(){
+    while (next < list.length) await processOne(next++);
+  }
+  await Promise.all(Array.from({length: Math.min(READ_CONCURRENCY, list.length)}, worker));
+  rebuild();
 
   prog.style.display='none';
   document.getElementById('pick').disabled=false;

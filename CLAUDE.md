@@ -78,6 +78,13 @@ klassische Tabellen (inkl. LEK) und OIB-2015+-Kennwertblöcke. Workflow:
 2. Fehlt/falsch ein Feld → das passende `byLabel`/`metric`/Regex in `extract()` anpassen.
 3. `python3 build.py` → erneut validieren → committen.
 
+## CI / Deploy
+
+`.github/workflows/deploy-pages.yml` baut bei jedem Push auf `master` (`python3 build.py`) und deployt
+`dist/` nach GitHub Pages. **Kein Test-Gate:** Die CI ruft `validate.js` NICHT auf — vor dem Push lokal
+`node test/validate.js test/samples` grün halten, sonst geht eine kaputte Engine live. `dist/index.html`
+ist committet, wird aber im Deploy ohnehin frisch aus dem Template gebaut.
+
 ## Designprinzip
 
 Bei unsicherem Layout bewusst **leer / `MANUELL`** statt falscher Zahl. Keine OCR — gescannte PDFs
