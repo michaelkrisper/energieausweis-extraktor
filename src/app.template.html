@@ -127,11 +127,16 @@
 <script>
 "use strict";
 
-// pdf.js Worker aus eingebettetem Blob (kein externer Pfad nötig)
-(function(){
-  var w = document.getElementById('pdfworker');
-  if (w && window.pdfjsLib){
-    var blob = new Blob([w.textContent], {type:'application/javascript'});
+// pdf.js 6 ist ein ES-Modul: aus eingebettetem Text einen Blob bauen, dynamisch importieren
+// und als window.pdfjsLib bereitstellen. Worker ebenso aus eingebettetem Blob (kein externer Pfad).
+// pdfjsReady muss vor dem ersten getDocument awaited werden.
+const pdfjsReady = (async () => {
+  const modText = document.getElementById('pdfmodule').textContent;
+  const modUrl = URL.createObjectURL(new Blob([modText], {type:'text/javascript'}));
+  window.pdfjsLib = await import(modUrl);
+  const w = document.getElementById('pdfworker');
+  if (w){
+    const blob = new Blob([w.textContent], {type:'text/javascript'});
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
   }
 })();
@@ -627,7 +632,8 @@ async function* walk(dirHandle, prefix='', inEnergie=false){
 // Spaltenlücken als Doppel-Leerzeichen -> die Zellen-Logik kann Label/Wert trennen.
 async function pdfToText(file){
   const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({data:buf, useWorkerFetch:false, isEvalSupported:false}).promise;
+  const task = pdfjsLib.getDocument({data:buf, useWorkerFetch:false, isEvalSupported:false});
+  const doc = await task.promise;
   const pages = doc.numPages;
   let text='';
   const n = Math.min(pages, 14);
@@ -654,7 +660,7 @@ async function pdfToText(file){
     }
     text += '\n';
   }
-  await doc.destroy();
+  await task.destroy();
   return {text, pages};
 }
 
@@ -670,6 +676,8 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   try{ dir = await window.showDirectoryPicker(); }
   catch(e){ return; }
   dirName = dir.name;
+
+  await pdfjsReady;   // pdf.js-Modul + Worker fertig geladen
 
   document.getElementById('hint').style.display='none';
   document.getElementById('pick').disabled=true;

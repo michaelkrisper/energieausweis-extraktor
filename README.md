@@ -77,7 +77,7 @@ python3 build.py     # -> dist/index.html
 ```
 
 Bibliotheken in `vendor/` (committet, damit der Build offline reproduzierbar ist):
-- `pdf.min.js` + `pdf.worker.min.js` — pdf.js 3.11.174 (Apache-2.0)
+- `pdf.min.mjs` + `pdf.worker.min.mjs` — pdf.js 6.1.200 (ES-Modul, Apache-2.0)
 - `xlsx.full.min.js` — SheetJS 0.20.3 (Apache-2.0)
 
 ### Erkennung anpassen

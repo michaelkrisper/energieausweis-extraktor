@@ -12,21 +12,26 @@ def lib(name: str) -> str:
 
 
 # Sanity: keine </script> in den Libs (würde Inline-Embed brechen)
-for f in ("pdf.min.js", "pdf.worker.min.js", "xlsx.full.min.js"):
+for f in ("pdf.min.mjs", "pdf.worker.min.mjs", "xlsx.full.min.js"):
     if "</script" in lib(f).lower():
         raise SystemExit(
             f"FEHLER: {f} enthaelt </script> -> kann nicht inline eingebettet werden"
         )
 
 out = tpl
-out = out.replace("<!--__PDFJS__-->", "<script>\n" + lib("pdf.min.js") + "\n</script>")
+# pdf.js 6 ist ein ES-Modul -> als text/plain einbetten; das Template baut daraus zur Laufzeit
+# einen Blob und importiert es dynamisch (import()). Klassisches <script> wuerde ESM nicht laden.
+out = out.replace(
+    "<!--__PDFJS__-->",
+    '<script type="text/plain" id="pdfmodule">\n' + lib("pdf.min.mjs") + "\n</script>",
+)
 out = out.replace(
     "<!--__SHEETJS__-->", "<script>\n" + lib("xlsx.full.min.js") + "\n</script>"
 )
 out = out.replace(
     "<!--__PDFWORKER__-->",
     '<script type="text/plain" id="pdfworker">\n'
-    + lib("pdf.worker.min.js")
+    + lib("pdf.worker.min.mjs")
     + "\n</script>",
 )
 

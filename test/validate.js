@@ -4,17 +4,21 @@
  * Nutzt denselben pdf.js-Pfad und dieselbe extract()-Logik wie dist/index.html, damit das
  * Ergebnis dem Browser-Verhalten entspricht.
  *
- *   npm i pdfjs-dist@3.11.174        # einmalig (nur Dev-Maschine, nicht der Firmen-PC)
+ *   npm i pdfjs-dist@6.1.200         # einmalig (nur Dev-Maschine, nicht der Firmen-PC)
  *   node test/validate.js <ordner-mit-pdfs>     # default: test/samples
  *
  * Gibt pro PDF: ist-Energieausweis?, Feld-Abdeckung und die wichtigsten Werte.
  */
 const fs = require("node:fs");
 const path = require("node:path");
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
-	"pdfjs-dist/legacy/build/pdf.worker.js",
-);
+// pdf.js 6 ist ESM -> dynamisch importieren (initPdfjs() vor dem ersten getDocument awaiten)
+let pdfjsLib;
+async function initPdfjs() {
+	pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.min.mjs");
+	pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
+		"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+	);
+}
 
 // extract()/isEnergieausweis() direkt aus dem Template ziehen (keine Code-Duplikation/Drift)
 const tpl = fs.readFileSync(
@@ -26,11 +30,12 @@ eval(tpl.slice(tpl.indexOf("const NUM_KEYS"), tpl.indexOf("// ---- State")));
 
 // pdfToText 1:1 wie im Template (Zeilen-Rekonstruktion aus 2D-Positionen)
 async function pdfToText(buf) {
-	const doc = await pdfjsLib.getDocument({
+	const task = pdfjsLib.getDocument({
 		data: buf,
 		useWorkerFetch: false,
 		isEvalSupported: false,
-	}).promise;
+	});
+	const doc = await task.promise;
 	const pages = doc.numPages;
 	let text = "";
 	for (let p = 1; p <= Math.min(pages, 14); p++) {
@@ -55,7 +60,7 @@ async function pdfToText(buf) {
 		}
 		text += "\n";
 	}
-	await doc.destroy();
+	await task.destroy();
 	return { text, pages };
 }
 
@@ -122,6 +127,7 @@ function loadBaseline(p) {
 }
 
 (async () => {
+	await initPdfjs();
 	const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 	const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith("--")));
 	const dir = args[0] || path.join(__dirname, "samples");

@@ -8,7 +8,7 @@
     "validate": "node test/validate.js"
   },
   "devDependencies": {
-    "pdfjs-dist": "3.11.174"
+    "pdfjs-dist": "^6.1.200"
   },
   "comment": "Die ausgelieferte dist/index.html braucht KEINE Dependencies. pdfjs-dist ist nur fürs Dev-Test-Harness (test/validate.js) auf dem Entwickler-Rechner."
 }

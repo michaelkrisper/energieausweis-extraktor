@@ -27,10 +27,13 @@ muss grün bleiben (100 %). `2>/dev/null` blendet harmlose pdf.js-Font-Warnungen
 ## Architektur
 
 **Build-Modell (kritisch):** `dist/index.html` ist ein **generiertes Artefakt**, nicht editieren.
-`build.py` inlinet die `vendor/*.js`-Libs (pdf.js, SheetJS, pdf.worker als `type="text/plain"`-Blob)
-über Platzhalter-Kommentare (`<!--__PDFJS__-->` etc.) in `src/app.template.html`. Quelle ist immer
-das Template; nach jeder Änderung `python3 build.py`. Die Libs liegen committet in `vendor/`, damit
-der Build offline reproduzierbar ist.
+`build.py` inlinet die `vendor/`-Libs über Platzhalter-Kommentare (`<!--__PDFJS__-->` etc.) in
+`src/app.template.html`. SheetJS (`xlsx.full.min.js`) kommt als klassisches `<script>`. pdf.js 6
+(`pdf.min.mjs`) **und** der Worker (`pdf.worker.min.mjs`) sind **ES-Module** → werden als
+`type="text/plain"`-Blöcke eingebettet; das Template baut daraus zur Laufzeit Blob-URLs und lädt pdf.js
+per dynamischem `import()` (`pdfjsReady`-Promise, vor erstem `getDocument` awaiten), den Worker via
+`GlobalWorkerOptions.workerSrc`. Quelle ist immer das Template; nach jeder Änderung `python3 build.py`.
+Die Libs liegen committet in `vendor/`, damit der Build offline reproduzierbar ist.
 
 **Eine Engine, zwei Aufrufer — kein Drift:** Die Extraktionslogik lebt nur in `src/app.template.html`.
 `test/validate.js` dupliziert sie NICHT, sondern `eval()`t den Engine-Block direkt aus dem Template
