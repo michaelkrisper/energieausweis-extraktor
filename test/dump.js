@@ -4,17 +4,22 @@
  * Nur Entwicklungshilfe zum Tunen — nicht Teil des ausgelieferten Tools.
  */
 const fs = require("node:fs");
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
-	"pdfjs-dist/legacy/build/pdf.worker.js",
-);
+// pdf.js 6 ist ESM -> dynamisch importieren (wie validate.js)
+let pdfjsLib;
+async function initPdfjs() {
+	pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.min.mjs");
+	pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
+		"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+	);
+}
 
 async function pdfToText(buf) {
-	const doc = await pdfjsLib.getDocument({
+	const task = pdfjsLib.getDocument({
 		data: buf,
 		useWorkerFetch: false,
 		isEvalSupported: false,
-	}).promise;
+	});
+	const doc = await task.promise;
 	let text = "";
 	for (let p = 1; p <= Math.min(doc.numPages, 14); p++) {
 		const tc = await (await doc.getPage(p)).getTextContent();
@@ -39,7 +44,7 @@ async function pdfToText(buf) {
 		}
 		text += "\n";
 	}
-	await doc.destroy();
+	await task.destroy();
 	return text;
 }
 
@@ -49,5 +54,6 @@ async function pdfToText(buf) {
 		console.error("Nutzung: node test/dump.js <pdf>");
 		process.exit(1);
 	}
+	await initPdfjs();
 	process.stdout.write(await pdfToText(new Uint8Array(fs.readFileSync(f))));
 })();

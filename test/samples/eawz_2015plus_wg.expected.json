@@ -35,5 +35,8 @@
   "lek": "25.73",
   "ausstelldatum": "1.1.2017",
   "gueltig_bis": "1.1.2027",
-  "aussteller": "Testfirma"
+  "aussteller": "Testfirma",
+  "huellflaeche": "1236.78",
+  "soll_innen": "20",
+  "bauweise": "mittelschwer"
 }

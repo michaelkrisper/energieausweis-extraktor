@@ -33,5 +33,13 @@
   "fgee": "0.55",
   "lek": "18.5",
   "ausstelldatum": "07.01.2016",
-  "aussteller": "Muster GmbH"
+  "aussteller": "Muster GmbH",
+  "huellflaeche": "450",
+  "soll_innen": "20",
+  "bauweise": "mittelschwer",
+  "hhsb": "16.4",
+  "peb_nern": "31.8",
+  "peb_ern": "67.0",
+  "eawz_h": "1.60",
+  "ern_anteil": "alternatives Energiesystemerfüllt"
 }

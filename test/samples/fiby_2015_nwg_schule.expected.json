@@ -33,5 +33,17 @@
   "lek": "69.7",
   "ausstelldatum": "29.10.2019",
   "gueltig_bis": "28.10.2029",
-  "aussteller": "AEE Energiedienstleistungen GmbH"
+  "aussteller": "AEE Energiedienstleistungen GmbH",
+  "huellflaeche": "5295",
+  "soll_innen": "20",
+  "bauweise": "mittelschwer",
+  "heizlast": "235.9",
+  "kb": "7.3",
+  "kb_stern_rk": "0.0",
+  "bsb": "24.6",
+  "beleb": "24.8",
+  "peb_nern": "282.1",
+  "peb_ern": "126.1",
+  "eawz_h": "1.03",
+  "ern_anteil": "k.A."
 }

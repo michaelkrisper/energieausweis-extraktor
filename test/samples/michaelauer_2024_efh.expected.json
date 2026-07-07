@@ -37,5 +37,18 @@
   "lek": "22.00",
   "ausstelldatum": "19.03.2024",
   "gueltig_bis": "18.03.2034",
-  "aussteller": "REDBOXX - Planung & Baumanagement"
+  "aussteller": "REDBOXX - Planung & Baumanagement",
+  "huellflaeche": "572.4",
+  "soll_innen": "22.0",
+  "bauweise": "schwer",
+  "ww_system": "Wärmepumpe",
+  "rh_system": "Wärmepumpe",
+  "hhsb": "13.9",
+  "peb_nern": "36.1",
+  "peb_ern": "21.6",
+  "pve": "",
+  "eawz_ww": "0.80",
+  "eawz_rh": "0.23",
+  "eawz_h": "0.29",
+  "gz": "2024-045"
 }

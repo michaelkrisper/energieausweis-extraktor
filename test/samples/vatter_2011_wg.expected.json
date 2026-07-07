@@ -33,5 +33,8 @@
   "lek": "21.79",
   "ausstelldatum": "16.05.2014",
   "gueltig_bis": "15.05.2024",
-  "aussteller": "VATTER & Partner ZT-GmbH"
+  "aussteller": "VATTER & Partner ZT-GmbH",
+  "huellflaeche": "8455.5",
+  "soll_innen": "20.0",
+  "bauweise": "mittelschwer"
 }

@@ -162,42 +162,72 @@ const COLUMNS = [
   {key:'bgf',            label:'Brutto-Grundfläche m²',    edit:true},
   {key:'bezugsflaeche',  label:'kond./Bezugsfläche m²',    edit:true},
   {key:'bruttovolumen',  label:'Brutto-Volumen m³',        edit:true},
+  {key:'huellflaeche',   label:'Gebäude-Hüllfläche m²',    edit:true},
   {key:'char_laenge',    label:'charakt. Länge lc [m]',    edit:true},
   {key:'kompaktheit',    label:'Kompaktheit A/V',          edit:true},
   {key:'u_mittel',       label:'mittl. U-Wert',            edit:true},
+  {key:'bauweise',       label:'Bauweise',                 edit:true},
   {key:'klimaregion',    label:'Klimaregion',              edit:true},
   {key:'seehoehe',       label:'Seehöhe m',                edit:true},
   {key:'heizgradtage',   label:'Heizgradtage Kd',          edit:true},
   {key:'norm_aussen',    label:'Norm-Außentemp °C',        edit:true},
+  {key:'soll_innen',     label:'Soll-Innentemp °C',        edit:true},
   {key:'heiztage',       label:'Heiztage d',               edit:true},
+  {key:'ww_system',      label:'WW-WB-System (primär)',    edit:true},
+  {key:'rh_system',      label:'RH-WB-System (primär)',    edit:true},
+  {key:'kuehlsystem',    label:'Kältebereitstellungs-System', edit:true},
+  {key:'solarthermie',   label:'Solarthermie m²',          edit:true},
+  {key:'photovoltaik',   label:'Photovoltaik kWp',         edit:true},
+  {key:'heizlast',       label:'Gebäude-Heizlast kW',      edit:true},
   {key:'hwb',            label:'HWB SK kWh/m²a',           edit:true},
   {key:'hwb_rk',         label:'HWB RK kWh/m²a',           edit:true},
   {key:'hwb_ref_sk',     label:'HWB Ref,SK kWh/m²a',       edit:true},
   {key:'hwb_ref_rk',     label:'HWB Ref,RK kWh/m²a',       edit:true},
   {key:'hwb_klasse',     label:'HWB-Klasse',               edit:true},
+  {key:'kb',             label:'KB SK kWh/m²a',            edit:true},
+  {key:'kb_stern_rk',    label:'KB* RK kWh/m³a',           edit:true},
+  {key:'keb',            label:'KEB SK kWh/m²a',           edit:true},
   {key:'wwwb',           label:'WWWB kWh/m²a',             edit:true},
   {key:'heb',            label:'HEB kWh/m²a',              edit:true},
   {key:'hteb',           label:'HTEB kWh/m²a',             edit:true},
+  {key:'eawz_ww',        label:'eAWZ Warmwasser',          edit:true},
+  {key:'eawz_rh',        label:'eAWZ Raumheizung',         edit:true},
+  {key:'eawz_h',         label:'eAWZ Heizen',              edit:true},
+  {key:'eawz_k',         label:'eAWZ Kühlen',              edit:true},
+  {key:'hhsb',           label:'HHSB kWh/m²a',             edit:true},
+  {key:'bsb',            label:'BSB kWh/m²a',              edit:true},
+  {key:'befeb',          label:'BefEB SK kWh/m²a',         edit:true},
+  {key:'beleb',          label:'BelEB kWh/m²a',            edit:true},
   {key:'eeb',            label:'EEB SK kWh/m²a',           edit:true},
   {key:'eeb_rk',         label:'EEB RK kWh/m²a',           edit:true},
   {key:'peb',            label:'PEB SK kWh/m²a',           edit:true},
+  {key:'peb_nern',       label:'PEB n.ern. SK kWh/m²a',    edit:true},
+  {key:'peb_ern',        label:'PEB ern. SK kWh/m²a',      edit:true},
   {key:'fgee',           label:'fGEE',                     edit:true},
   {key:'fgee_rk',        label:'fGEE RK',                  edit:true},
   {key:'fgee_klasse',    label:'fGEE-Klasse',              edit:true},
   {key:'co2',            label:'CO₂ SK kg/m²a',            edit:true},
+  {key:'pve',            label:'PV-Export SK kWh/m²a',     edit:true},
+  {key:'ern_anteil',     label:'Erneuerbarer Anteil',      edit:true},
   {key:'lek',            label:'LEK-Wert',                 edit:true},
   {key:'ausstelldatum',  label:'Ausstelldatum',            edit:true},
   {key:'gueltig_bis',    label:'Gültig bis',               edit:true},
+  {key:'gwr',            label:'GWR-Zahl',                 edit:true},
+  {key:'zeus',           label:'ZEUS-Nr',                  edit:true},
+  {key:'gz',             label:'Geschäftszahl',            edit:true},
   {key:'aussteller',     label:'Aussteller',               edit:true},
   {key:'pfad',           label:'Pfad',                     edit:false},
 ];
 
 // Spalten, die als Zahl ins Excel sollen (Komma->Punkt-normalisiert)
-const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','char_laenge','kompaktheit','u_mittel',
-  'seehoehe','heizgradtage','norm_aussen','heiztage','hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','wwwb',
-  'heb','hteb','eeb','eeb_rk','peb','co2','lek','fgee','fgee_rk']);
+const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','huellflaeche','char_laenge','kompaktheit','u_mittel',
+  'seehoehe','heizgradtage','norm_aussen','soll_innen','heiztage','solarthermie','photovoltaik','heizlast',
+  'hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','kb','kb_stern_rk','keb','wwwb',
+  'heb','hteb','eawz_ww','eawz_rh','eawz_h','eawz_k','hhsb','bsb','befeb','beleb',
+  'eeb','eeb_rk','peb','peb_nern','peb_ern','co2','pve','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
-const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','wwwb','heb','hteb','eeb','peb','co2','fgee','lek'];
+const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','kb','keb','wwwb','heb','hteb','hhsb','bsb','befeb','beleb',
+  'eeb','peb','peb_nern','peb_ern','co2','pve','fgee','lek'];
 
 // ============================================================================
 //  Extraktions-Engine — zellenbasiert. Layouttreuer Text wird in Spalten
@@ -370,6 +400,28 @@ function extract(text){
   r.heizgradtage = byLabel(lines, /Heizgradtage/i, {num:true, unit:'K'});
   r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C', down:true});
   r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d'});
+  r.huellflaeche = byLabel(lines, /Geb[äa]ude-?H[üu]llfl[äa]che/i, {num:true, unit:'m²'});
+  r.soll_innen   = byLabel(lines, /Soll-?Innentemperatur/i, {num:true, unit:'°C'});
+  // Bauweise: Wert direkt nach dem Label ("Bauweise  schwer") oder adjektivisch
+  // im Fließtext ("schwere Bauweise", ältere Layouts) — nur bekannte Klassen.
+  r.bauweise     = reText(text, /Bauweise\s*[: ]\s*((?:sehr\s+)?(?:mittelschwer|leicht|mittel|schwer))/i)
+                || reText(text, /\b((?:sehr\s+)?(?:mittelschwere|leichte|schwere))\s+Bauweise/i).replace(/e$/,'');
+  // Wärmebereitstellungs-Systeme (nur OIB-2015+-Deckblatt). "---"/Folge-Label -> leer.
+  r.ww_system    = byLabel(lines, /WW-?WB-?System\s*\(?\s*prim[^)]*\)?/i, {max:30});
+  r.rh_system    = byLabel(lines, /RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i, {max:30});
+  r.kuehlsystem  = byLabel(lines, /Kältebereitstellungs-?System/i, {max:30});
+  for (const k of ['ww_system','rh_system','kuehlsystem'])
+    if (!/[A-Za-zÄÖÜäöü]/.test(r[k]) || /WB-?System|LEK|Bauweise|Teil-/i.test(r[k])) r[k]='';
+  // Solarthermie/PV: Zahl+Einheit muss auf der Label-Zeile NACH dem Label stehen
+  // ("Solarthermie  - m²" bleibt leer; Tabellen ohne Einheit greifen nicht).
+  function afterLabelNum(labelRe, unit){
+    for (const ln of lines){ const i = ln.search(labelRe); if (i<0) continue;
+      const v = numBeforeUnit(ln.slice(i), unit); if (v!=='') return v; }
+    return '';
+  }
+  r.solarthermie = afterLabelNum(/Solarthermie/i, 'm²');
+  r.photovoltaik = afterLabelNum(/Photovoltaik(?!-?\s*Export)/i, 'kWp');
+  r.heizlast     = byLabel(lines, /Geb[äa]ude-?Heizlast/i, {num:true, unit:'kW(?![hp])'});
   // -- Energie-Kennzahlen --------------------------------------------------
   // GEQ-Layout trennt Referenzklima (RK) und Standortklima (SK) in Blöcke und
   // hängt die Index-Suffixe (SK / RK / Ref,SK) z.T. in die Folgezeile. Wir
@@ -470,6 +522,60 @@ function extract(text){
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a');   // OCR: "CO," statt "CO2"
+  // Wert NUR auf der Abkürzungszeile selbst (Vorarlberg-Stapellayout: Nachbar-
+  // zeilen gehören zu ANDEREN Kennzahlen, daher kein Zeilenübergriff wie bei
+  // byAbbrAdjacent). Abkürzung muss am Zeilenanfang stehen ("KB   3,2 kWh/m²a").
+  function byAbbrLine(abbrRe, opt){
+    opt = opt || {};
+    const vre = new RegExp('('+NUMRE+')\\s*'+(opt.unit||'kWh\\/m²a'),'i');
+    for (let l=0;l<lines.length;l++){
+      const ai = lines[l].search(abbrRe); if (ai<0) continue;
+      if (opt.section && sec[l]!==opt.section) continue;
+      const m = lines[l].slice(ai).match(vre); if (m) return cleanNum(m[1]);
+    }
+    return '';
+  }
+  // -- Kühlung (NWG bzw. OIB 2015+): KB im Standortklima, KB* (außeninduziert,
+  // kWh/m³a!) im Anforderungs-/Referenzklima-Block, KEB inkl. Kältebereitstellung.
+  // Abkürzungs-Fallback ohne Section-Filter: die klimafonds-Spaltenüberschrift
+  // "Referenzklima  Standortklima  Anforderung" schaltet sec[] fälschlich auf RK.
+  r.kb          = byGerman(/^\s*Kühlbedarf\b(?!\*)/i, {section:'SK'})
+               || byAbbrLine(/^\s*KB(?![\w*:.,])/);
+  r.kb_stern_rk = byGerman(/Au[ßs]eninduzierter\s+Kühlbedarf|^\s*Kühlbedarf\*/i, {unit:'kWh\\/m³a'});
+  r.keb         = byGerman(/^\s*Kühlenergiebedarf\b/i, {section:'SK'})
+               || byAbbrLine(/^\s*KEB(?![\w:])/);
+  // -- Strom-/Sonderbedarfe: HHSB (Wohngebäude), BSB (Nicht-Wohngebäude),
+  // Befeuchtung + Beleuchtung (NWG; ETU schreibt "Beleuchtungsenerergiebedarf").
+  r.hhsb  = byGerman(/^\s*Haushaltsstrombedarf\b/i, {})
+         || byAbbrLine(/^\s*HHSB(?![\w:])/);
+  r.bsb   = byGerman(/^\s*Betriebsstrombedarf\b/i, {})
+         || byAbbrLine(/^\s*BSB(?![\w:])/);
+  r.befeb = byGerman(/^\s*Befeuchtungsenergiebedarf\b/i, {section:'SK'})
+         || byAbbrLine(/^\s*BefEB(?![\w:])/);
+  r.beleb = byGerman(/^\s*Beleuchtungsener(?:er)?giebedarf\b/i, {})
+         || byAbbrLine(/^\s*BelEB(?![\w:])/);
+  // -- PEB-Aufteilung + PV-Export (OIB 2019/2023; iu/ArchiPHYSIK stellt den
+  // PVE-Wert in die Zeile ÜBER das Label -> up:true).
+  r.peb_nern = byGerman(/Prim[äa]renergiebedarf\s*nicht\s*erneuerbar/i, {section:'SK'})
+            || byAbbrLine(/^\s*PEB\s*n\.?\s*ern/i);
+  r.peb_ern  = byGerman(/Prim[äa]renergiebedarf\s+erneuerbar/i, {section:'SK'})
+            || byAbbrLine(/^\s*PEB\s*ern/i);
+  // PVE einheitsstrikt (byAbbrAdjacent verlangt kWh/m²a): der shortComma-Fallback
+  // von byGerman würde sonst den fGEE aus der Zeile über dem Label greifen.
+  r.pve      = byAbbrAdjacent(/Photovoltaik-?\s*Export/i, {});
+  // -- Energieaufwandszahlen (dimensionslos, daher nur short-comma-Fallback)
+  r.eawz_ww = byGerman(/Energieaufwandszahl\s+Warmwasser/i, {});
+  r.eawz_rh = byGerman(/Energieaufwandszahl\s+Raumheizung/i, {});
+  r.eawz_h  = byGerman(/Energieaufwandszahl\s+Heizen/i, {});
+  r.eawz_k  = byGerman(/Energieaufwandszahl\s+Kühlen/i, {});
+  r.ern_anteil = byLabel(lines, /Erneuerbarer Anteil/i, {max:40});
+  // nur plausible Aussagen behalten — der Wert steht z.T. gar nicht im PDF und
+  // byLabel würde sonst die nächste Kennzahl-Zeile greifen
+  if (!/erf[üu]llt|entspricht|k\.\s*A\.|Biomasse|alternativ|Punkt|%|Solar|W[äa]rmepumpe|Fernw[äa]rme|Abw[äa]rme/i.test(r.ern_anteil)) r.ern_anteil='';
+  // Verwaltungs-Nummern des ERSTELLT-Blocks; ohne Ziffer -> Fehlgriff -> leer
+  r.gwr  = byLabel(lines, /GWR-?Zahl/i, {max:20});          if (!/\d/.test(r.gwr)) r.gwr='';
+  r.zeus = reText(text, /ZEUS\s*Nr\.?:?\s*([\d.\-\/]{4,25})/i);
+  r.gz   = byLabel(lines, /Geschäftszahl/i, {max:24});      if (!/\d/.test(r.gz)) r.gz='';
   // LEK: Wert auf der Label-Zeile (ggf. nach "T"-Subskript) ODER in der Folgezeile
   // (ECOTECH "LEK-Wert" \n "… T  177,33"). Kein Zeilenübergriff im Hauptregex.
   r.lek = '';
@@ -545,7 +651,10 @@ function extract(text){
   r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:60});
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }
-  for (const k of NUM_KEYS){ if (r[k]) r[k] = cleanNum(r[k]); }
+  // nur noch rohe Komma-Werte (Regex-Pfade wie LEK) nachnormalisieren — ein
+  // zweites cleanNum auf "17.826" (bereits normalisiert) würde den Dezimalpunkt
+  // als Tausenderpunkt deuten und 17826 daraus machen
+  for (const k of NUM_KEYS){ if (r[k] && /,/.test(r[k])) r[k] = cleanNum(r[k]); }
   return r;
 }
 

@@ -34,5 +34,15 @@
   "fgee": "0.83",
   "lek": "19.0",
   "ausstelldatum": "08.01.2019",
-  "aussteller": "Gebr. OITNER Bauunternehmung GmbH."
+  "aussteller": "Gebr. OITNER Bauunternehmung GmbH.",
+  "huellflaeche": "339",
+  "soll_innen": "20",
+  "bauweise": "mittelschwer",
+  "heizlast": "3.1",
+  "hhsb": "16.4",
+  "peb_nern": "55.8",
+  "peb_ern": "140.8",
+  "eawz_h": "1.32",
+  "ern_anteil": "alternatives Energiesystemerfüllt",
+  "pve": ""
 }

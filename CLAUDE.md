@@ -50,6 +50,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   = Excel-Reihenfolge. Fehlt ein Wert in einer Ausgabe, bleibt die Spalte leer. Hauptspalten
   (`hwb`, `eeb`, `peb`, `co2`, `fgee`) führen den **Standortklima-Wert** (realer Bedarf / Inserat-Zahl);
   RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `fgee_rk`).
+  Dazu die vollen OIB-2015+-Kennwertblöcke (`kb`, `kb_stern_rk` [kWh/m³a!], `keb`, `hhsb`, `bsb`,
+  `befeb`, `beleb`, `peb_nern`, `peb_ern`, `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts
+  (`huellflaeche`, `soll_innen`, `bauweise`, `ww_system`/`rh_system`/`kuehlsystem`, `solarthermie`,
+  `photovoltaik`, `heizlast`, `ern_anteil`, `gwr`/`zeus`/`gz`).
   `NUM_KEYS`/`KENNZAHLEN` beim Spalten-Ändern mitpflegen.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
@@ -61,6 +65,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     {section})` nimmt den einheitsbehafteten Wert direkt neben der Abkürzung (rechts bei GEQ, links bei
     ArchiPHYSIK). `specOnLine()` liefert den ersten kWh/m²a-Wert einer Zeile (= realer Bedarf, nicht die
     Anforderungsgrenze rechts). `fgeeIn(section)` nimmt bei „0,900 0,817" (Limit+Ist) den letzten Wert.
+    `byAbbrLine(abbrRe)` = einheitsstrikt und NUR auf der Abkürzungszeile selbst — für Vorarlberg-
+    Stapellayouts, wo Nachbarzeilen zu anderen Kennzahlen gehören (kein Zeilenübergriff). Achtung:
+    die klimafonds-Spaltenüberschrift „Referenzklima Standortklima Anforderung" schaltet `sec[]` auf
+    RK; Abkürzungs-Fallbacks dort ohne `section`-Filter ansetzen.
   - direkter Regex über `reText(text, re)` für Datum, OIB-Ausgabe, Klassen; `dateNear()` für Datum in
     der Folgezeile. Ein eawz-Block (`if (/AUSWEISUNG IN INSERATEN|FÖRDERANSUCHEN/)`) überschreibt die
     unsicheren Vorarlberg-Stapelspalten mit den sauberen Inserat-Kennzahlen.

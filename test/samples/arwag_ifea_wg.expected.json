@@ -37,5 +37,18 @@
   "lek": "16.59",
   "ausstelldatum": "13.05.2025",
   "gueltig_bis": "12.05.2035",
-  "aussteller": "IfEA - Sabine Riederer"
+  "aussteller": "IfEA - Sabine Riederer",
+  "huellflaeche": "2695.55",
+  "soll_innen": "22.0",
+  "bauweise": "schwer",
+  "ww_system": "kombiniert",
+  "rh_system": "Fernwärme",
+  "hhsb": "22.8",
+  "peb_nern": "26.3",
+  "peb_ern": "34.7",
+  "pve": "0.0",
+  "eawz_ww": "2.67",
+  "eawz_rh": "0.93",
+  "eawz_h": "1.40",
+  "gz": "2514751"
 }

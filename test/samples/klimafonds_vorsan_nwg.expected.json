@@ -30,5 +30,13 @@
   "fgee": "2.15",
   "lek": "89.06",
   "ausstelldatum": "20.09.2013",
-  "gueltig_bis": "20.09.2023"
+  "gueltig_bis": "20.09.2023",
+  "huellflaeche": "473.86",
+  "soll_innen": "20.0",
+  "bauweise": "schwer",
+  "heizlast": "17.826",
+  "kb": "3.2",
+  "kb_stern_rk": "0.0",
+  "bsb": "9.1",
+  "beleb": "32.2"
 }

@@ -33,5 +33,18 @@
   "lek": "66.4",
   "ausstelldatum": "06.08.2018",
   "gueltig_bis": "05.08.2028",
-  "aussteller": "FIBY ZT GmbH"
+  "aussteller": "FIBY ZT GmbH",
+  "huellflaeche": "4128",
+  "soll_innen": "28",
+  "bauweise": "mittelschwer",
+  "heizlast": "434.5",
+  "kb": "4.5",
+  "kb_stern_rk": "0.0",
+  "bsb": "49.3",
+  "beleb": "37.9",
+  "peb_nern": "640.1",
+  "peb_ern": "83.3",
+  "eawz_h": "1.29",
+  "ern_anteil": "k.A.",
+  "gz": "28-001"
 }

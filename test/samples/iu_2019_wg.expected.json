@@ -35,5 +35,14 @@
   "lek": "22.20",
   "ausstelldatum": "18.08.2016",
   "gueltig_bis": "17.08.2026",
-  "aussteller": "Dipl.-Ing. Erich Röhrer RÖHRER BAUPHYSIK"
+  "aussteller": "Dipl.-Ing. Erich Röhrer RÖHRER BAUPHYSIK",
+  "huellflaeche": "5042.50",
+  "soll_innen": "20",
+  "bauweise": "mittelschwer",
+  "hhsb": "16.43",
+  "peb_nern": "25.17",
+  "peb_ern": "24.46",
+  "pve": "0.00",
+  "eawz_h": "1.56",
+  "ern_anteil": "erfüllt"
 }
