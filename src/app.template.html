@@ -324,6 +324,16 @@ function isEnergieausweis(text){
 }
 
 function extract(text){
+  // Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
+  // ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor Kleinbuchstaben kommt in echtem Text nicht
+  // vor -> ab 3 Treffern die feste Tabelle zurückmappen (auch ²/³/°/ß betroffen).
+  if ((text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3){
+    const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
+    text = text.replace(/[ƒ‰ˆ¸‹÷ﬂ≤≥∞]/g, c => MOJI[c]);
+    // ß wurde zur fl-Ligatur und von pdf.js zu ASCII "fl" normalisiert -> nur
+    // wortweise reparierbar (Label-Wörter, die die Extraktion braucht)
+    text = text.replace(/Strafle/g,'Straße').replace(/Auflen/g,'Außen').replace(/Grofl/g,'Groß');
+  }
   text = text.replace(/[−–‐‑]/g,'-'); // Unicode-Minus/Bindestriche -> ASCII '-'
   const lines = text.replace(/\r/g,'').split('\n');
   const r = {};
@@ -369,7 +379,8 @@ function extract(text){
   if (!/\d/.test(r.gstnr)) r.gstnr = '';
   r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
-  r.kategorie    = reText(text, /\b(Einfamilienhaus|Mehrfamilienhaus|Reihenhaus|B[üu]rogeb[äa]ude)\b/i)
+  r.kategorie    = reText(text, /Energieausweis f[üu]r (Sonstige konditionierte Geb[äa]ude)/i) // OIB 2023: dritte Kategorie
+                 || reText(text, /\b(Einfamilienhaus|Mehrfamilienhaus|Reihenhaus|B[üu]rogeb[äa]ude)\b/i)
                  || (/Nicht-?Wohngeb[äa]ude/i.test(text) ? 'Nichtwohngebäude'
                     : /\bWohngeb[äa]ude\b/i.test(text) ? 'Wohngebäude' : '');
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp/i, {max:60})
@@ -411,7 +422,7 @@ function extract(text){
   r.rh_system    = byLabel(lines, /RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i, {max:30});
   r.kuehlsystem  = byLabel(lines, /Kältebereitstellungs-?System/i, {max:30});
   for (const k of ['ww_system','rh_system','kuehlsystem'])
-    if (!/[A-Za-zÄÖÜäöü]/.test(r[k]) || /WB-?System|LEK|Bauweise|Teil-/i.test(r[k])) r[k]='';
+    if (!/[A-Za-zÄÖÜäöü]{2}/.test(r[k]) || /WB-?System|LEK|Bauweise|Teil-|charakterist|L[äa]nge/i.test(r[k])) r[k]='';
   // Solarthermie/PV: Zahl+Einheit muss auf der Label-Zeile NACH dem Label stehen
   // ("Solarthermie  - m²" bleibt leer; Tabellen ohne Einheit greifen nicht).
   function afterLabelNum(labelRe, unit){
@@ -457,6 +468,9 @@ function extract(text){
       // GEQ-Anforderungszeile: "<dt.Label> 49,7 ...erfüllt  HWB 35,9" -> Wert nach
       // der Abkürzung ist der Bedarfswert (links steht die Anforderungsgrenze).
       if (opt.afterAbbr){ const ai = scope.search(opt.afterAbbr); if (ai>=0) scope = scope.slice(ai); }
+      // Strich vor der Einheit = Wert bewusst leer ("BefEB = -kWh/m²a") ->
+      // NICHT auf die Folgezeile (nächste Kennzahl) durchfallen.
+      if (new RegExp('-\\s*'+(opt.unit||'kWh\\/m²a'),'i').test(scope)) continue;
       // ArchiPHYSIK stellt den Wert z.T. in die Zeile ÜBER das Label.
       // Folgezeile nur nutzen, wenn sie nicht selbst eine andere Kennzahl ist.
       const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar/i.test(lines[l+1]||'');
@@ -556,7 +570,8 @@ function extract(text){
          || byAbbrLine(/^\s*BelEB(?![\w:])/);
   // -- PEB-Aufteilung + PV-Export (OIB 2019/2023; iu/ArchiPHYSIK stellt den
   // PVE-Wert in die Zeile ÜBER das Label -> up:true).
-  r.peb_nern = byGerman(/Prim[äa]renergiebedarf\s*nicht\s*erneuerbar/i, {section:'SK'})
+  // up:true: MA-39-Layout (2015) stellt den Wert in die Zeile ÜBER das Label.
+  r.peb_nern = byGerman(/Prim[äa]renergiebedarf\s*nicht\s*erneuerbar/i, {section:'SK', up:true})
             || byAbbrLine(/^\s*PEB\s*n\.?\s*ern/i);
   r.peb_ern  = byGerman(/Prim[äa]renergiebedarf\s+erneuerbar/i, {section:'SK'})
             || byAbbrLine(/^\s*PEB\s*ern/i);
@@ -573,7 +588,7 @@ function extract(text){
   // byLabel würde sonst die nächste Kennzahl-Zeile greifen
   if (!/erf[üu]llt|entspricht|k\.\s*A\.|Biomasse|alternativ|Punkt|%|Solar|W[äa]rmepumpe|Fernw[äa]rme|Abw[äa]rme/i.test(r.ern_anteil)) r.ern_anteil='';
   // Verwaltungs-Nummern des ERSTELLT-Blocks; ohne Ziffer -> Fehlgriff -> leer
-  r.gwr  = byLabel(lines, /GWR-?Zahl/i, {max:20});          if (!/\d/.test(r.gwr)) r.gwr='';
+  r.gwr  = byLabel(lines, /GWR-?Zahl/i, {max:20});          if (!/^\d[\d.,\-\/ ]*$/.test(r.gwr)) r.gwr='';
   r.zeus = reText(text, /ZEUS\s*Nr\.?:?\s*([\d.\-\/]{4,25})/i);
   r.gz   = byLabel(lines, /Geschäftszahl/i, {max:24});      if (!/\d/.test(r.gz)) r.gz='';
   // LEK: Wert auf der Label-Zeile (ggf. nach "T"-Subskript) ODER in der Folgezeile
@@ -613,9 +628,14 @@ function extract(text){
       if (!/f\s*GEE|fGEE|Gesamtenergieeffizienz-?Faktor/i.test(lines[l])) continue;
       if (/:\s*Der\b/.test(lines[l])) continue;            // Erläuterungstext "fGEE: Der ..."
       if (section!=='any' && sec[l]!==section) continue;
-      const blob = lines[l]+' '+(lines[l+1]||'');
-      const all = blob.match(/(?<![\d.,])[0-9],\d{1,3}(?!\d)/g);  // fGEE kann >4 sein (schlechte Bestände)
+      // Label-Zeile bevorzugen; Folgezeile nur, wenn sie selbst keinen Wert hat
+      // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
+      const FGV = /(?<![\d.,])[0-9],\d{1,3}(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
+      const src = FGV.test(lines[l]) ? lines[l] : (lines[l+1]||''); FGV.lastIndex = 0;
+      const all = src.match(FGV);
       if (!all) continue;
+      // "0,43 entspricht 0,75": Ist VOR der Anforderung -> erster Wert.
+      if (/entspricht|zul[.,]?\s*=/i.test(src)) return cleanNum(all[0]);
       // "0,900  0,817" (Anforderung + Ist) -> Ist = letzter Wert. Sonst einziger.
       return cleanNum(all[all.length-1]);
     }
@@ -635,7 +655,14 @@ function extract(text){
   function dateNear(labelRe){
     for (let l=0;l<lines.length;l++){
       if (!labelRe.test(lines[l])) continue;
-      const m = lines[l].match(DATE) || (lines[l+1]||'').match(DATE) || (lines[l+2]||'').match(DATE);
+      let m = lines[l].match(DATE);
+      // Folgezeile mit EIGENEM Datums-Label gehört nicht zum gesuchten Label
+      // ("Ausstellungsdatum  Unterschrift" / "Gültigkeitsdatum07.12.2030").
+      for (let j=1; !m && j<=2; j++){
+        const nl = lines[l+j]||'';
+        if (/G[üu]ltig|Ausstellungs?datum|Erstelldatum/i.test(nl) && !labelRe.test(nl)) break;
+        m = nl.match(DATE);
+      }
       if (m) return m[1];
     }
     return '';

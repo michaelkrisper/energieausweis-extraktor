@@ -64,7 +64,9 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     `byGerman(labelRe, {section, unit, …})` ankert an der deutschen Bezeichnung; `byAbbrAdjacent(abbrRe,
     {section})` nimmt den einheitsbehafteten Wert direkt neben der Abkürzung (rechts bei GEQ, links bei
     ArchiPHYSIK). `specOnLine()` liefert den ersten kWh/m²a-Wert einer Zeile (= realer Bedarf, nicht die
-    Anforderungsgrenze rechts). `fgeeIn(section)` nimmt bei „0,900 0,817" (Limit+Ist) den letzten Wert.
+    Anforderungsgrenze rechts). `fgeeIn(section)` nimmt bei „0,900 0,817" (Limit+Ist) den letzten Wert,
+    bei „0,43 entspricht 0,75" (Ist+Limit, ETU/ArchiPHYSIK) den ersten; Werte der Label-Zeile schlagen
+    die Folgezeile (GEQ 2023 stellt darunter „PVE =0,0").
     `byAbbrLine(abbrRe)` = einheitsstrikt und NUR auf der Abkürzungszeile selbst — für Vorarlberg-
     Stapellayouts, wo Nachbarzeilen zu anderen Kennzahlen gehören (kein Zeilenübergriff). Achtung:
     die klimafonds-Spaltenüberschrift „Referenzklima Standortklima Anforderung" schaltet `sec[]` auf
@@ -74,6 +76,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     unsicheren Vorarlberg-Stapelspalten mit den sauberen Inserat-Kennzahlen.
 - `isEnergieausweis(text)` — Punkte-Schwelle (≥2); darunter wird die Datei übersprungen (in ENERGIE-
   Ordnern liegen auch fremde PDFs).
+- **Mojibake-Reparatur:** Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
+  (`ƒ`=Ä, `‰`=ä, `≤`=², `∞`=°). `extract()` erkennt das (≥3ד‰/¸/ˆ vor Kleinbuchstabe") und mappt
+  per fester Tabelle zurück; ß→fl-Ligatur wird von pdf.js zu ASCII „fl" normalisiert und ist nur
+  wortweise reparierbar (`Strafle`→`Straße`, `Auflen`→`Außen`).
 - `cleanNum()` — normalisiert österreichische Dezimalkommas (`45,6`→`45.6`) und Tausenderpunkte.
   `NUM_KEYS` = Spalten, die als echte Zahl ins Excel gehen.
 
@@ -82,8 +88,11 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 ## Neues Aussteller-Format ergänzen
 
-Geprüft gegen GEQ, eawz, ILS ZT, e-s-e, FIBY ZT, klimafonds (Baujahre 2010–2024), zwei Layout-Familien:
-klassische Tabellen (inkl. LEK) und OIB-2015+-Kennwertblöcke. Workflow:
+Geprüft gegen GEQ (inkl. Ausgabe Mai 2023), eawz, ILS ZT, e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol,
+ArchiPHYSIK (auch Mac-Mojibake), MA 39 Wien (Baujahre 2010–2025), zwei Layout-Familien: klassische
+Tabellen (inkl. LEK) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
+„Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
+bleiben dort bewusst leer. Workflow:
 
 1. PDF nach `test/samples/` legen, `node test/validate.js test/samples` laufen lassen.
 2. Fehlt/falsch ein Feld → das passende `byLabel`/`metric`/Regex in `extract()` anpassen.
