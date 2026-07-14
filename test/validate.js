@@ -38,6 +38,7 @@ async function pdfToText(buf) {
 	const doc = await task.promise;
 	const pages = doc.numPages;
 	let text = "";
+	const linePos = [];
 	for (let p = 1; p <= Math.min(pages, 14); p++) {
 		const tc = await (await doc.getPage(p)).getTextContent();
 		const lm = new Map();
@@ -45,7 +46,7 @@ async function pdfToText(buf) {
 			if (!it.str || !it.transform) continue;
 			const k = Math.round(it.transform[5] / 2) * 2;
 			if (!lm.has(k)) lm.set(k, []);
-			lm.get(k).push({ x: it.transform[4], s: it.str });
+			lm.get(k).push({ x: it.transform[4], w: it.width || 0, s: it.str });
 		}
 		for (const y of [...lm.keys()].sort((a, b) => b - a)) {
 			const parts = lm.get(y).sort((a, b) => a.x - b.x);
@@ -57,11 +58,13 @@ async function pdfToText(buf) {
 				lastX = pt.x + pt.s.length * 5;
 			}
 			text += `${line}\n`;
+			linePos.push({ page: p, parts });
 		}
 		text += "\n";
+		linePos.push({ page: p, parts: [] });
 	}
 	await task.destroy();
-	return { text, pages };
+	return { text, pages, linePos };
 }
 
 // Felder für den Coverage-Fallback (PDFs OHNE .expected.json)
@@ -155,8 +158,9 @@ function loadBaseline(p) {
 	for (const f of pdfs) {
 		const base = f.slice(0, 36).padEnd(38);
 		let text;
+		let linePos;
 		try {
-			({ text } = await pdfToText(
+			({ text, linePos } = await pdfToText(
 				new Uint8Array(fs.readFileSync(path.join(dir, f))),
 			));
 		} catch (e) {
@@ -167,7 +171,7 @@ function loadBaseline(p) {
 			console.log(`${base} ÜBERSPRUNGEN (kein Energieausweis)`);
 			continue;
 		}
-		const r = extract(text);
+		const r = extract(text, linePos);
 		const expPath = path.join(dir, `${f.replace(/\.pdf$/i, "")}.expected.json`);
 
 		if (fs.existsSync(expPath)) {

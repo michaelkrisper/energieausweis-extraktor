@@ -41,8 +41,10 @@ Die Libs liegen committet in `vendor/`, damit der Build offline reproduzierbar i
 gemeinsam. Die `pdfToText`-Zeilenrekonstruktion ist in beiden bewusst 1:1 identisch gehalten.
 
 **Pipeline:** PDF → `pdfToText` rekonstruiert layouttreuen Text aus den 2D-Textpositionen von pdf.js
-(Items nach y-Position zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen).
-→ `extract(text)` füllt pro Feld einen Wert. → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
+(Items nach y-Position zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
+und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,w,s}]}` mit den ECHTEN
+pdf.js-Positionen. → `extract(text, linePos)` füllt pro Feld einen Wert (ohne `linePos` fallen alle
+Positions-Helfer auf reine Textlogik zurück). → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
 Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 **Engine-Kern (`src/app.template.html`):**
@@ -51,10 +53,25 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   (`hwb`, `eeb`, `peb`, `co2`, `fgee`) führen den **Standortklima-Wert** (realer Bedarf / Inserat-Zahl);
   RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `fgee_rk`).
   Dazu die vollen OIB-2015+-Kennwertblöcke (`kb`, `kb_stern_rk` [kWh/m³a!], `keb`, `hhsb`, `bsb`,
-  `befeb`, `beleb`, `peb_nern`, `peb_ern`, `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts
-  (`huellflaeche`, `soll_innen`, `bauweise`, `ww_system`/`rh_system`/`kuehlsystem`, `solarthermie`,
-  `photovoltaik`, `heizlast`, `ern_anteil`, `gwr`/`zeus`/`gz`).
-  `NUM_KEYS`/`KENNZAHLEN` beim Spalten-Ändern mitpflegen.
+  `befeb`, `beleb`, `peb_nern`, `peb_ern`, `peb_heb_nern_rk` [OIB 2023: PEB n.ern. für RH+WW(+Bel), RK],
+  `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts (`huellflaeche`, `soll_innen`, `bauweise`,
+  `ww_system`/`rh_system`/`kuehlsystem`, `solarthermie`, `photovoltaik`, `stromspeicher`, `heizlast`,
+  `ern_anteil`, `kg_nr`, `ea_art` [Umsetzungsstand/EA-Art/ZEUS-Typ], `letzte_veraenderung`,
+  `gwr`/`zeus`/`gz`). Spaltenlabels folgen der Norm-Nomenklatur der OIB-Muster (HWB Ref,SK / CO2eq,SK /
+  eAWZ,WW …). `NUM_KEYS`/`KENNZAHLEN` beim Spalten-Ändern mitpflegen.
+- **Positionslogik (`climHeaders`/`colValue`):** Tabellen mit Klimaspalten-Überschrift
+  („Referenzklima  Standortklima  Anforderung") UND Unterzeile („spezifisch  zonenbezogen  spezifisch",
+  ECOTECH/ETU/GEQ-2011/AX3000) werden über die echten x-Positionen aufgelöst: jeder Wert gehört zur
+  x-nächsten Unterspalte; ein kWh/a-Wert wirkt als Paar-Anker (der spez. Wert direkt rechts erbt dessen
+  Spalte — AX3000 druckt „zonal spez" je Klima). Achtung: die ERSTE spezifisch-Spalte ist dort das
+  REFERENZKLIMA — der alte „erster kWh/m²a-Wert der Zeile"-Ansatz wäre falsch. Ohne Unterzeile
+  (rechtsbündige Header, z.B. sozialbau) bleibt bewusst die Textlogik aktiv. Header nur, wenn die Zeile
+  AUSSCHLIESSLICH aus Header-Tokens besteht (Prosa zählt nicht). `numAboveLabel()` holt x-ausgerichtete
+  Werte aus der Zeile ÜBER dem Label (AX3000 stapelt `0,29  -16,0` über „mittlerer U-Wert … Norm-Außen…").
+  `byLabel` hat einen Fließtext-Guard (kleingeschriebenes Wort vor dem Label = Satz, kein Feld).
+- **Berechnete Klassen:** `hwb_klasse`/`fgee_klasse` stehen oft nur in der Deckblatt-GRAFIK; die
+  Klassengrenzen sind normativ fix (OIB RL6, ident 2015/2019/2023) → Fallback berechnet sie aus
+  `hwb_ref_sk`/`hwb` bzw. `fgee`.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
@@ -88,9 +105,11 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 ## Neues Aussteller-Format ergänzen
 
-Geprüft gegen GEQ (inkl. Ausgabe Mai 2023), eawz, ILS ZT, e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol,
-ArchiPHYSIK (auch Mac-Mojibake), MA 39 Wien (Baujahre 2010–2025), zwei Layout-Familien: klassische
-Tabellen (inkl. LEK) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
+Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
+e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (auch Mac-Mojibake,
+Version 16), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
+Werte) — Baujahre 2010–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
+Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
 bleiben dort bewusst leer. Workflow:
 
