@@ -6,118 +6,218 @@
 <title>Energieausweis-Extraktor</title>
 <style>
   :root{
-    --ea-blue:#165f83;
-    --ea-blue-light:#237ca8;
-    --ea-blue-dark:#0f4660;
-    --ok:#2e7d32;
-    --warn:#b25b00;
-    --manuell:#a94442;
-    --bg:#f4f6f8;
-    --line:#d7dde2;
+    --bg:#f4f6f9; --surface:#ffffff; --surface2:#f1f5f8;
+    --text:#12222e; --muted:#5b6c79; --line:#dde5ec; --line-strong:#c6d2dc;
+    --accent:#0d6a8f; --accent-hover:#0a556f; --accent-soft:#e3f0f6; --accent-text:#ffffff;
+    --ok:#1a7f37; --ok-bg:#e5f3e8;
+    --warn:#9a5b00; --warn-bg:#fcf0dc;
+    --danger:#b3372b;
+    --focus:#2196c9;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(18,34,46,.05), 0 6px 20px rgba(18,34,46,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e161d; --surface:#151f28; --surface2:#1b2732;
+      --text:#e4ecf2; --muted:#90a2b0; --line:#26343f; --line-strong:#35485a;
+      --accent:#2f97c0; --accent-hover:#4fadd2; --accent-soft:#123240; --accent-text:#06222e;
+      --ok:#4cc06d; --ok-bg:#12301b;
+      --warn:#e8a13c; --warn-bg:#33270f;
+      --danger:#e07064;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
+    }
   }
   *{box-sizing:border-box}
   body{
-    margin:0;font-family:"Open Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    color:#1d2b35;background:var(--bg);font-size:14px;
+    margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--text);background:var(--bg);font-size:14px;line-height:1.45;
   }
   header{
-    background:var(--ea-blue);color:#fff;padding:14px 22px;
-    display:flex;align-items:center;gap:16px;box-shadow:0 2px 6px rgba(0,0,0,.15);
+    background:var(--surface);border-bottom:1px solid var(--line);
+    padding:13px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
   }
-  header .logo{
-    font-weight:800;font-size:22px;letter-spacing:.5px;
-    background:#fff;color:var(--ea-blue);padding:4px 10px;border-radius:4px;
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{
+    width:40px;height:40px;border-radius:9px;flex:none;
+    background:linear-gradient(135deg,#1d9e55,var(--accent));
+    color:#fff;font-weight:800;font-size:16px;letter-spacing:.5px;
+    display:grid;place-items:center;
   }
-  header h1{font-size:17px;font-weight:600;margin:0}
-  header .sub{font-size:12px;opacity:.85;margin-top:2px}
-  main{padding:18px 22px 60px}
-  .bar{
-    display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;
+  header h1{font-size:16.5px;font-weight:650;margin:0}
+  header .sub{font-size:12px;color:var(--muted);margin-top:1px}
+  .privacy{
+    margin-left:auto;font-size:12.5px;color:var(--muted);
+    display:flex;align-items:center;gap:7px;
   }
-  button{
-    font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
-    border:none;border-radius:5px;padding:9px 16px;color:#fff;background:var(--ea-blue);
-    transition:background .15s;
+  .privacy svg{width:14px;height:14px;flex:none}
+  /* Energieklassen-Farbleiste als Marken-Akzent */
+  .scalebar{height:4px;background:linear-gradient(90deg,#00a651,#4cb848,#bfd730,#fff200,#fdb913,#f37021,#ed1c24)}
+  main{padding:16px 24px 40px}
+  .toolbar{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 14px;box-shadow:var(--shadow);
   }
-  button:hover{background:var(--ea-blue-dark)}
-  button.secondary{background:#fff;color:var(--ea-blue);border:1px solid var(--ea-blue)}
-  button.secondary:hover{background:#eef4f8}
-  button:disabled{background:#9bb3c0;cursor:not-allowed}
-  .filterbox input,.filterbox select{
-    font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;
+  .btn{
+    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+    border:1px solid var(--line-strong);border-radius:8px;padding:9px 15px;
+    background:var(--surface);color:var(--text);
+    display:inline-flex;align-items:center;gap:8px;
+    transition:background .15s,border-color .15s;
   }
-  .stats{margin-left:auto;display:flex;gap:8px;font-size:13px;align-items:center;flex-wrap:wrap}
-  .pill{padding:3px 10px;border-radius:12px;font-weight:600}
-  .pill.ok{background:#e3f1e4;color:var(--ok)}
-  .pill.manuell{background:#f7e3e3;color:var(--manuell)}
-  .pill.total{background:#e4eef4;color:var(--ea-blue)}
-  .pill.skip{background:#eceff1;color:#607d8b}
-  #progress{height:6px;background:#dde5ea;border-radius:3px;overflow:hidden;margin-bottom:14px;display:none}
-  #progress>div{height:100%;width:0;background:var(--ea-blue-light);transition:width .2s}
-  .note{font-size:12.5px;color:#5a6b78;margin:6px 0 14px;line-height:1.5}
-  .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;max-height:calc(100vh - 250px)}
-  table{border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap}
+  .btn:hover{background:var(--surface2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+  .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .btn.danger{background:transparent;color:var(--danger);border-color:var(--danger)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn:disabled:hover{background:var(--surface)}
+  .btn.primary:disabled:hover{background:var(--accent)}
+  .btn svg{width:15px;height:15px;flex:none}
+  input[type=search],select{
+    font:inherit;font-size:13px;color:var(--text);background:var(--surface);
+    border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;
+  }
+  input[type=search]{width:200px}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+  .check{
+    display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);
+    cursor:pointer;user-select:none;white-space:nowrap;
+  }
+  .check input{accent-color:var(--accent);margin:0}
+  .stats{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .pill{padding:3px 10px;border-radius:999px;font-weight:600;font-size:12px;white-space:nowrap}
+  .pill.total{background:var(--accent-soft);color:var(--accent)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)}
+  .pill.manuell{background:var(--warn-bg);color:var(--warn)}
+  .pill.skip{background:var(--surface2);color:var(--muted)}
+  #progress{margin-top:14px;display:flex;align-items:center;gap:12px}
+  #progress[hidden]{display:none}
+  .track{flex:1;height:8px;background:var(--surface2);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  #progbar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#1d9e55);transition:width .2s}
+  .progtext{font-size:12.5px;color:var(--muted);white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+  #dropzone{
+    margin-top:16px;padding:60px 24px;text-align:center;
+    border:2px dashed var(--line-strong);border-radius:var(--radius);
+    background:var(--surface);transition:border-color .15s,background .15s;
+  }
+  body.dragging #dropzone{border-color:var(--accent);background:var(--accent-soft)}
+  .dz-icon{width:46px;height:46px;color:var(--accent);margin-bottom:10px}
+  #dropzone h2{font-size:16px;font-weight:600;margin:0 0 10px}
+  .dz-or{color:var(--muted);font-weight:400}
+  #dropzone p{font-size:13px;color:var(--muted);max-width:660px;margin:0 auto 10px}
+  .dz-hint{font-size:12px !important;opacity:.85}
+  .tablewrap{
+    margin-top:16px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--surface);box-shadow:var(--shadow);max-height:calc(100vh - 215px);
+  }
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;white-space:nowrap}
   thead th{
-    position:sticky;top:0;background:var(--ea-blue);color:#fff;font-weight:600;
-    padding:8px 10px;text-align:left;border-right:1px solid rgba(255,255,255,.15);z-index:2;
+    position:sticky;top:0;background:var(--surface2);color:var(--text);
+    font-weight:600;font-size:11.5px;padding:9px 10px;text-align:left;
+    border-bottom:1px solid var(--line-strong);border-right:1px solid var(--line);
+    z-index:2;cursor:pointer;user-select:none;
   }
+  thead th:hover{background:var(--accent-soft)}
+  thead th.sorted::after{content:" ▲";font-size:9px;color:var(--accent)}
+  thead th.sorted.desc::after{content:" ▼"}
   thead th:first-child{position:sticky;left:0;z-index:3}
-  tbody td{padding:6px 10px;border-bottom:1px solid #eef1f4;border-right:1px solid #f1f4f6}
-  tbody td[contenteditable]:focus{outline:2px solid var(--ea-blue-light);background:#fbfdff}
-  tbody tr:hover td{background:#f7fafc}
-  td.status{font-weight:700}
-  tr.s-ok td.status{color:var(--ok)}
-  tr.s-manuell td.status{color:var(--manuell)}
-  tr.s-manuell{background:#fdf6f6}
-  td.file{position:sticky;left:0;background:#fff;font-weight:600;color:var(--ea-blue);max-width:240px;overflow:hidden;text-overflow:ellipsis}
-  tr:hover td.file{background:#f7fafc}
-  .empty{padding:50px;text-align:center;color:#7a8794}
-  code{background:#eef1f4;padding:1px 5px;border-radius:3px;font-size:12px}
-  .warnB{color:var(--manuell)}
+  tbody td{
+    padding:6px 10px;background:var(--surface);
+    border-bottom:1px solid var(--line);border-right:1px solid var(--line);
+  }
+  tbody tr:nth-child(even) td{background:var(--surface2)}
+  tbody tr:hover td{background:var(--accent-soft)}
+  tbody td[contenteditable]:focus{outline:2px solid var(--focus);outline-offset:-2px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.status{white-space:nowrap}
+  td.edited{box-shadow:inset 0 -2px 0 var(--accent)}
+  td.file{
+    position:sticky;left:0;z-index:1;font-weight:600;color:var(--accent);
+    max-width:240px;overflow:hidden;text-overflow:ellipsis;
+  }
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn)}
+  .empty{padding:50px;text-align:center;color:var(--muted)}
+  #toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:50}
+  .toast{
+    background:var(--surface);color:var(--text);border:1px solid var(--line);
+    border-left:4px solid var(--accent);border-radius:8px;padding:10px 14px;
+    box-shadow:var(--shadow);font-size:13px;max-width:360px;animation:slidein .25s ease;
+  }
+  .toast.ok{border-left-color:var(--ok)}
+  .toast.warn{border-left-color:var(--warn)}
+  .toast.out{opacity:0;transform:translateX(10px);transition:all .35s}
+  @keyframes slidein{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
 </style>
 </head>
 <body>
 <header>
-  <span class="logo">EA</span>
-  <div>
-    <h1>Energieausweis-Extraktor</h1>
-    <div class="sub">PDF → Excel · läuft lokal im Browser · keine Daten verlassen den Rechner</div>
+  <div class="brand">
+    <span class="logo">EA</span>
+    <div>
+      <h1>Energieausweis-Extraktor</h1>
+      <div class="sub">Österreichische Energieausweise (OIB 2011–2023) → Excel</div>
+    </div>
+  </div>
+  <div class="privacy" title="Alle PDFs werden ausschließlich lokal im Browser verarbeitet — kein Server, kein Upload.">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+    100&nbsp;% lokal · keine Daten verlassen den Rechner
   </div>
 </header>
+<div class="scalebar" aria-hidden="true"></div>
 
 <main>
-  <div class="bar">
-    <button id="pick">📁 Ordner wählen</button>
-    <button id="export" class="secondary" disabled>⬇ Excel exportieren</button>
-    <div class="filterbox">
-      <input id="search" type="text" placeholder="Suche / Filter…" style="width:200px">
-      <select id="statusFilter">
-        <option value="">alle Status</option>
-        <option value="ok">nur OK</option>
-        <option value="manuell">nur manuell</option>
-      </select>
-    </div>
+  <section class="toolbar">
+    <button id="pick" class="btn primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Ordner wählen
+    </button>
+    <button id="cancel" class="btn danger" hidden>Abbrechen</button>
+    <button id="export" class="btn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      Excel exportieren
+    </button>
+    <input id="search" type="search" placeholder="Suchen / filtern …">
+    <select id="statusFilter">
+      <option value="">alle Status</option>
+      <option value="ok">nur OK</option>
+      <option value="manuell">nur manuell</option>
+    </select>
+    <label class="check" title="Spalten ohne einen einzigen Wert ausblenden. Der Excel-Export enthält immer alle Spalten.">
+      <input type="checkbox" id="hideEmpty" checked> leere Spalten ausblenden
+    </label>
+    <label class="check" title="Nur Teilbäume durchsuchen, deren Ordnername „ENERGIE&quot; enthält. Abschalten = alle Ordner scannen.">
+      <input type="checkbox" id="onlyEnergie" checked> nur „ENERGIE“-Ordner
+    </label>
     <div class="stats" id="stats"></div>
+  </section>
+
+  <div id="progress" hidden>
+    <div class="track"><div id="progbar"></div></div>
+    <div id="progtext" class="progtext"></div>
   </div>
 
-  <div id="progress"><div></div></div>
+  <section id="dropzone">
+    <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5m0-5-2 2m2-2 2 2"/></svg>
+    <h2>Ordner hierher ziehen <span class="dz-or">oder oben</span> „Ordner wählen“</h2>
+    <p>Der Ordnerbaum wird rekursiv nach Energieausweis-PDFs durchsucht (standardmäßig nur Ordner
+       mit <b>„ENERGIE“</b> im Namen — oben umschaltbar). Alle erkannten OIB-Kennwerte landen in
+       einer editierbaren Tabelle und lassen sich gesammelt als Excel exportieren. Gescannte PDFs
+       ohne Textebene werden als <b>MANUELL</b> markiert, fremde PDFs übersprungen — bei unsicherem
+       Layout bleibt ein Feld lieber leer als falsch.</p>
+    <p class="dz-hint">Empfohlen: Chrome oder Edge. In anderen Browsern öffnet „Ordner wählen“ einen Dateidialog mit Ordnerauswahl; Drag&nbsp;&amp;&nbsp;Drop von Ordnern gibt es nur in Chromium.</p>
+  </section>
+  <input type="file" id="dirinput" webkitdirectory multiple hidden>
 
-  <div class="note" id="hint">
-    <b>So geht's:</b> „Ordner wählen" → den Wurzelordner auswählen. Es werden <b>nur Ordner mit
-    „ENERGIE" im Namen</b> durchsucht (Teilbaum inklusive; Dateinamen egal). PDFs, die offensichtlich
-    <b>kein</b> Energieausweis sind, werden automatisch <b>übersprungen</b>. Zellen sind direkt editierbar
-    — korrigier was die Erkennung verfehlt, <b>dann</b> exportieren. Status
-    <span class="warnB">manuell</span> = gescannt oder Format weicht zu stark ab → bitte von Hand prüfen.
-    <br>Browser: <b>Edge</b> oder Chrome (Firefox kann keine Ordner lesen).
-  </div>
-
-  <div class="tablewrap">
+  <section class="tablewrap" id="tablewrap" hidden>
     <table id="tbl">
       <thead><tr id="head"></tr></thead>
-      <tbody id="rows"><tr><td class="empty" colspan="99">Noch keine Daten. Oben „Ordner wählen".</td></tr></tbody>
+      <tbody id="rows"></tbody>
     </table>
-  </div>
+  </section>
 </main>
+<div id="toasts"></div>
 
 <!-- ===== eingebettete Bibliotheken (offline, kein CDN) ===== -->
 <!--__PDFJS__-->
@@ -1038,20 +1138,78 @@ function extract(text, linePos){
 let DATA = [];
 let SKIPPED = 0;
 let dirName = '';
+let sortKey = null, sortDir = 1;
+let cancelScan = false;
 
-// ---- UI bauen ----
-const head = document.getElementById('head');
-COLUMNS.forEach(c=>{ const th=document.createElement('th'); th.textContent=c.label; head.appendChild(th); });
+const $ = id => document.getElementById(id);
 
-function statusClass(s){ return s.startsWith('OK') ? 's-ok' : 's-manuell'; }
+// ---- Toasts statt blockierender alert()-Dialoge ----
+function toast(msg, kind){
+  const t = document.createElement('div');
+  t.className = 'toast'+(kind ? ' '+kind : '');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(), 400); }, 7000);
+}
+
+// ---- Kopfzeile: Klick sortiert (numerisch für Zahlenspalten, Leere ans Ende) ----
+const head = $('head');
+COLUMNS.forEach(c=>{
+  const th = document.createElement('th');
+  th.textContent = c.label;
+  th.title = c.label+' — klicken zum Sortieren';
+  th.dataset.key = c.key;
+  th.addEventListener('click', ()=>{
+    if (sortKey === c.key) sortDir = -sortDir; else { sortKey = c.key; sortDir = 1; }
+    sortData(); render();
+  });
+  head.appendChild(th);
+});
+
+function sortData(){
+  if (!sortKey) return;
+  const num = NUM_KEYS.has(sortKey);
+  DATA.sort((a,b)=>{
+    const va = a[sortKey]||'', vb = b[sortKey]||'';
+    if (va==='' && vb==='') return 0;
+    if (va==='') return 1;                       // Leere unabhängig von der Richtung ans Ende
+    if (vb==='') return -1;
+    if (num){
+      const na = parseFloat(va), nb = parseFloat(vb);
+      if (isFinite(na) && isFinite(nb)) return (na-nb)*sortDir;
+    }
+    return String(va).localeCompare(String(vb),'de',{numeric:true})*sortDir;
+  });
+}
+
+function statusBadge(s){
+  const span = document.createElement('span');
+  span.className = 'badge '+(s.toLowerCase().includes('manuell') ? 'warn' : 'ok');
+  span.textContent = s;
+  return span;
+}
+
+// Sichtbare Spalten: bei "leere ausblenden" nur solche mit mindestens einem Wert
+// (Datei/Status/Pfad immer). Der Excel-Export bleibt davon unberührt.
+function usedColumns(){
+  if (!$('hideEmpty').checked) return COLUMNS;
+  return COLUMNS.filter(c => !c.edit || DATA.some(d => String(d[c.key]||'') !== ''));
+}
 
 function render(){
-  const q = document.getElementById('search').value.toLowerCase();
-  const sf = document.getElementById('statusFilter').value;
-  const tb = document.getElementById('rows');
-  tb.innerHTML='';
-  let shown=0;
-  DATA.forEach((d,idx)=>{
+  const q = $('search').value.toLowerCase();
+  const sf = $('statusFilter').value;
+  const cols = usedColumns();
+  const visible = new Set(cols.map(c=>c.key));
+  for (const th of head.children){
+    th.hidden = !visible.has(th.dataset.key);
+    th.classList.toggle('sorted', th.dataset.key===sortKey);
+    th.classList.toggle('desc', th.dataset.key===sortKey && sortDir<0);
+  }
+  const tb = $('rows');
+  tb.innerHTML = '';
+  let shown = 0;
+  DATA.forEach(d=>{
     const isManuell = d.status.toLowerCase().includes('manuell');
     if (sf==='ok' && isManuell) return;
     if (sf==='manuell' && !isManuell) return;
@@ -1060,55 +1218,70 @@ function render(){
       if (!hay.includes(q)) return;
     }
     shown++;
-    const tr=document.createElement('tr');
-    tr.className = statusClass(d.status);
-    COLUMNS.forEach(c=>{
-      const td=document.createElement('td');
-      if (c.cls) td.classList.add(c.cls);
+    const tr = document.createElement('tr');
+    cols.forEach(c=>{
+      const td = document.createElement('td');
       if (c.key==='datei') td.classList.add('file');
-      td.textContent = d[c.key]||'';
+      if (NUM_KEYS.has(c.key)) td.classList.add('num');
+      if (c.key==='status'){ td.classList.add('status'); td.appendChild(statusBadge(d.status)); }
+      else td.textContent = d[c.key]||'';
       if (c.edit){
-        td.contentEditable='true';
-        td.addEventListener('input',()=>{ DATA[idx][c.key]=td.textContent; });
+        td.contentEditable = 'true';
+        td.spellcheck = false;
+        td.addEventListener('input', ()=>{ d[c.key] = td.textContent; td.classList.add('edited'); });
       }
       tr.appendChild(td);
     });
     tb.appendChild(tr);
   });
-  if (!shown){
-    tb.innerHTML='<tr><td class="empty" colspan="99">'+(DATA.length?'Kein Treffer für Filter.':'Noch keine Daten.')+'</td></tr>';
-  }
+  $('tablewrap').hidden = DATA.length===0;
+  $('dropzone').hidden = DATA.length>0;
+  if (!shown && DATA.length)
+    tb.innerHTML = '<tr><td class="empty" colspan="99">Kein Treffer für den aktuellen Filter.</td></tr>';
   updateStats();
 }
 
 function updateStats(){
-  const total=DATA.length;
-  const man=DATA.filter(d=>d.status.toLowerCase().includes('manuell')).length;
-  const ok=total-man;
-  let html='';
-  if (total||SKIPPED){
-    html='<span class="pill total">'+total+' Energieausweise</span>'
-       + '<span class="pill ok">'+ok+' OK</span>'
-       + '<span class="pill manuell">'+man+' manuell</span>';
-    if (SKIPPED) html+='<span class="pill skip">'+SKIPPED+' übersprungen</span>';
+  const total = DATA.length;
+  const man = DATA.filter(d=>d.status.toLowerCase().includes('manuell')).length;
+  const ok = total-man;
+  let html = '';
+  if (total || SKIPPED){
+    html = '<span class="pill total">'+total+' Energieausweise</span>'
+         + '<span class="pill ok">'+ok+' OK</span>'
+         + '<span class="pill manuell">'+man+' manuell</span>';
+    if (SKIPPED) html += '<span class="pill skip">'+SKIPPED+' übersprungen</span>';
   }
-  document.getElementById('stats').innerHTML = html;
-  document.getElementById('export').disabled = total===0;
+  $('stats').innerHTML = html;
+  $('export').disabled = total===0;
 }
 
-document.getElementById('search').addEventListener('input',render);
-document.getElementById('statusFilter').addEventListener('change',render);
+$('search').addEventListener('input', render);
+$('statusFilter').addEventListener('change', render);
+$('hideEmpty').addEventListener('change', render);
+
+// Editierte/eingelesene Daten nicht durch versehentliches Schließen verlieren
+window.addEventListener('beforeunload', e=>{
+  if (DATA.length){ e.preventDefault(); e.returnValue = ''; }
+});
 
 // ---- Ordner rekursiv einlesen — PDF wird genommen, wenn "energie" irgendwo im Pfad steht
-//      (Ordner-Vorfahr ODER Dateiname; case-insensitiv) ----
+//      (Ordner-Vorfahr ODER Dateiname; case-insensitiv). Fehlertolerant: ein nicht
+//      lesbarer Unterordner (Rechte, Netzlaufwerk) bricht den Scan nicht ab. ----
 const ENERGIE_RE = /energie/i;
 async function* walk(dirHandle, prefix='', inEnergie=false){
-  for await (const [name, handle] of dirHandle.entries()){
+  let entries;
+  try{ entries = dirHandle.entries(); }catch(e){ return; }
+  while (true){
+    let it;
+    try{ it = await entries.next(); }catch(e){ break; }
+    if (it.done) break;
+    const [name, handle] = it.value;
     const path = prefix ? prefix+'/'+name : name;
     if (handle.kind==='directory'){
       yield* walk(handle, path, inEnergie || ENERGIE_RE.test(name));
     } else if ((inEnergie || ENERGIE_RE.test(path)) && name.toLowerCase().endsWith('.pdf')){
-      yield {handle, path};
+      yield {name, path, getFile: ()=>handle.getFile()};
     }
   }
 }
@@ -1163,33 +1336,33 @@ async function pdfToText(file){
   return {text, pages, linePos};
 }
 
-const prog = document.getElementById('progress');
-const progBar = prog.firstElementChild;
+// ---- Scan-Pipeline: alle Quellen (Picker, Drag&Drop, Datei-Dialog-Fallback)
+//      liefern eine einheitliche Liste {name, path, getFile()} an runScan() ----
+function setProgress(done, total, name){
+  $('progbar').style.width = Math.round((done/total)*100)+'%';
+  $('progtext').textContent = done+' / '+total+' · '+name;
+}
 
-document.getElementById('pick').addEventListener('click', async ()=>{
-  if (!window.showDirectoryPicker){
-    alert('Dieser Browser kann keine Ordner lesen.\nBitte Microsoft Edge oder Google Chrome verwenden.');
+async function runScan(list){
+  if (!list.length){
+    toast($('onlyEnergie').checked
+      ? 'Keine PDFs in Ordnern mit „ENERGIE" im Namen gefunden. Tipp: Häkchen „nur ENERGIE-Ordner" entfernen, um alle Ordner zu durchsuchen.'
+      : 'Keine PDF-Dateien gefunden.', 'warn');
     return;
   }
-  let dir;
-  try{ dir = await window.showDirectoryPicker(); }
-  catch(e){ return; }
-  dirName = dir.name;
-
   await pdfjsReady;   // pdf.js-Modul + Worker fertig geladen
 
-  document.getElementById('hint').style.display='none';
-  document.getElementById('pick').disabled=true;
-  prog.style.display='block'; progBar.style.width='0%';
-
-  const list=[];
-  for await (const f of walk(dir, '', ENERGIE_RE.test(dir.name))) list.push(f);
+  cancelScan = false;
+  $('pick').disabled = true;
+  $('cancel').hidden = false;
+  $('progress').hidden = false;
+  setProgress(0, list.length, '…');
 
   // Parallel lesen: K Dateien gleichzeitig holen+parsen. Netz-Latenz (SMB/Netzlaufwerk) wird
   // überlappt statt addiert -> auf Netzlaufwerken oft um ein Vielfaches schneller. Ergebnisse
   // werden nach Original-Index abgelegt, damit DATA-Reihenfolge deterministisch (= Scan-Reihenfolge) bleibt.
   const READ_CONCURRENCY = 6;
-  DATA=[]; SKIPPED=0;
+  DATA = []; SKIPPED = 0; sortKey = null;
   const results = new Array(list.length);   // pro i: row-Objekt | null (übersprungen) | leer (offen)
   let done = 0, next = 0;
 
@@ -1203,10 +1376,10 @@ document.getElementById('pick').addEventListener('click', async ()=>{
   }
 
   async function processOne(i){
-    const {handle, path} = list[i];
-    const row = {datei:handle.name, pfad:path, status:''};
+    const item = list[i];
+    const row = {datei:item.name, pfad:item.path, status:''};
     try{
-      const file = await handle.getFile();
+      const file = await item.getFile();
       const {text, pages, linePos} = await pdfToText(file);
       const charsPerPage = text.replace(/\s/g,'').length / Math.max(pages,1);
 
@@ -1220,7 +1393,7 @@ document.getElementById('pick').addEventListener('click', async ()=>{
       } else {
         Object.assign(row, extract(text, linePos));
         const got = KENNZAHLEN.filter(k=>row[k]).length;
-        if (!row.hwb && !row.fgee && !row.peb && !row.hwb_sk && !row.lek){
+        if (!row.hwb && !row.fgee && !row.peb && !row.hwb_ref_sk && !row.lek){
           row.status = 'MANUELL · Kennzahlen nicht gefunden';
         } else {
           row.status = 'OK · '+got+' Kennzahlen';
@@ -1228,25 +1401,91 @@ document.getElementById('pick').addEventListener('click', async ()=>{
         results[i] = row;
       }
     }catch(err){
-      row.status = 'MANUELL · Lesefehler ('+(err.message||err)+')';
+      row.status = (err && err.name === 'PasswordException')
+        ? 'MANUELL · passwortgeschützt'
+        : 'MANUELL · Lesefehler ('+(err.message||err)+')';
       results[i] = row;
     }
     done++;
-    progBar.style.width = Math.round((done/list.length)*100)+'%';
+    setProgress(done, list.length, item.name);
     if (done % 5 === 0){ rebuild(); render(); }
   }
 
   async function worker(){
-    while (next < list.length) await processOne(next++);
+    while (next < list.length && !cancelScan) await processOne(next++);
   }
   await Promise.all(Array.from({length: Math.min(READ_CONCURRENCY, list.length)}, worker));
   rebuild();
 
-  prog.style.display='none';
-  document.getElementById('pick').disabled=false;
+  $('progress').hidden = true;
+  $('cancel').hidden = true;
+  $('pick').disabled = false;
   render();
-  if (!list.length) alert('Keine PDFs in Ordnern mit „ENERGIE" im Namen unter „'+dirName+'" gefunden.\n(Es werden nur solche Ordner durchsucht.)');
-  else if (!DATA.length) alert('Gefundene PDFs sind offenbar keine Energieausweise – alle übersprungen.');
+  if (cancelScan) toast('Scan abgebrochen — '+DATA.length+' Energieausweise bis dahin eingelesen.', 'warn');
+  else if (!DATA.length) toast('Gefundene PDFs sind offenbar keine Energieausweise — alle übersprungen.', 'warn');
+  else toast(DATA.length+' Energieausweis'+(DATA.length===1?'':'e')+' eingelesen'+(SKIPPED?' ('+SKIPPED+' fremde PDFs übersprungen)':'')+'.', 'ok');
+}
+
+$('cancel').addEventListener('click', ()=>{ cancelScan = true; });
+
+$('pick').addEventListener('click', async ()=>{
+  if (window.showDirectoryPicker){
+    let dir;
+    try{ dir = await window.showDirectoryPicker(); }
+    catch(e){ return; }                      // Auswahl abgebrochen
+    dirName = dir.name;
+    const all = !$('onlyEnergie').checked;
+    const list = [];
+    for await (const f of walk(dir, '', all || ENERGIE_RE.test(dir.name))) list.push(f);
+    runScan(list);
+  } else {
+    // Firefox/Safari: kein File System Access -> Ordnerauswahl über <input webkitdirectory>
+    $('dirinput').click();
+  }
+});
+
+$('dirinput').addEventListener('change', ()=>{
+  const files = [...$('dirinput').files];
+  $('dirinput').value = '';
+  const all = !$('onlyEnergie').checked;
+  const list = files
+    .filter(f => f.name.toLowerCase().endsWith('.pdf'))
+    .map(f => ({name:f.name, path:f.webkitRelativePath || f.name, getFile: async ()=>f}))
+    .filter(it => all || ENERGIE_RE.test(it.path));
+  dirName = ((files[0] && files[0].webkitRelativePath) || '').split('/')[0] || dirName;
+  runScan(list);
+});
+
+// ---- Drag & Drop: Ordner oder einzelne PDFs aufs Fenster ziehen. Handles müssen
+//      SYNCHRON angefordert werden (dataTransfer ist nach dem ersten await weg). ----
+let dragDepth = 0;
+window.addEventListener('dragover', e=>{ e.preventDefault(); });
+window.addEventListener('dragenter', e=>{ e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+window.addEventListener('dragleave', ()=>{ if (--dragDepth <= 0){ dragDepth = 0; document.body.classList.remove('dragging'); } });
+window.addEventListener('drop', async e=>{
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+  const items = [...e.dataTransfer.items].filter(it=>it.kind==='file');
+  const plainFiles = [...e.dataTransfer.files];
+  const all = !$('onlyEnergie').checked;
+  const list = [];
+  if (items.length && items[0].getAsFileSystemHandle){
+    const handles = await Promise.all(items.map(it=>it.getAsFileSystemHandle().catch(()=>null)));
+    for (const h of handles){
+      if (!h) continue;
+      if (h.kind === 'directory'){
+        dirName = h.name;
+        for await (const f of walk(h, h.name, all || ENERGIE_RE.test(h.name))) list.push(f);
+      } else if (h.name.toLowerCase().endsWith('.pdf')){
+        // direkt gedroppte Einzeldatei: bewusste Auswahl -> ENERGIE-Filter greift nicht
+        list.push({name:h.name, path:h.name, getFile: ()=>h.getFile()});
+      }
+    }
+  } else {
+    for (const f of plainFiles)
+      if (f.name.toLowerCase().endsWith('.pdf'))
+        list.push({name:f.name, path:f.name, getFile: async ()=>f});
+  }
+  if (list.length || items.length || plainFiles.length) runScan(list);
 });
 
 // ---- Excel-Export ----

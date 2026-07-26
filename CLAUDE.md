@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Lokales Single-File-Browser-Tool: liest österreichische Energieausweis-PDFs rekursiv aus einem
 Ordnerbaum, extrahiert OIB-Kennwerte heuristisch und exportiert sie vereinheitlicht nach Excel.
-Komplett offline, kein Server, keine Daten verlassen den Rechner. Läuft nur in Chromium (Edge/Chrome)
-— Firefox kann keine Ordner einlesen (File System Access API).
+Komplett offline, kein Server, keine Daten verlassen den Rechner. Voller Umfang in Chromium
+(Edge/Chrome: Ordner-Picker + Drag&Drop via File System Access API); Firefox/Safari nutzen den
+`<input webkitdirectory>`-Fallback. Alle Scan-Quellen (Picker/Drop/Fallback) liefern einheitliche
+`{name, path, getFile()}`-Listen an eine gemeinsame `runScan()`-Pipeline.
 
 ## Befehle
 

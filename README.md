@@ -6,22 +6,30 @@ Browser**, kein Server, keine Installation, keine Daten verlassen den Rechner.
 
 ## Benutzung (für Anwender)
 
-1. `dist/index.html` auf den Rechner kopieren und in **Microsoft Edge** (oder Chrome) öffnen
-   — Doppelklick genügt.
-2. **„📁 Ordner wählen"** → den Wurzelordner wählen. Es werden **nur Ordner durchsucht, die
-   `ENERGIE` im Namen tragen** (Teilbaum inklusive; Dateinamen sind egal).
+1. `dist/index.html` auf den Rechner kopieren und im Browser öffnen — Doppelklick genügt.
+   Empfohlen: **Chrome/Edge** (voller Funktionsumfang inkl. Drag & Drop von Ordnern).
+2. **„Ordner wählen"** (oder Ordner/PDFs einfach **aufs Fenster ziehen**) → den Wurzelordner
+   wählen. Standardmäßig werden **nur Ordner durchsucht, die `ENERGIE` im Namen tragen**
+   (Teilbaum inklusive; Dateinamen sind egal) — der Schalter **„nur ‚ENERGIE'-Ordner"** in der
+   Toolbar hebt das auf. Ein laufender Scan lässt sich **abbrechen** (Teilergebnis bleibt).
 3. PDFs, die **offensichtlich kein Energieausweis** sind, werden automatisch **übersprungen**
    (in den ENERGIE-Ordnern liegen oft auch andere PDFs).
-4. Tabelle prüfen. **Jede Zelle ist editierbar** — Erkennungsfehler direkt korrigieren.
-5. **„⬇ Excel exportieren"** → fertige `.xlsx` (mit Autofilter; Zahlen sind echte Zahlen).
+4. Tabelle prüfen. **Jede Zelle ist editierbar** — Erkennungsfehler direkt korrigieren
+   (editierte Zellen werden markiert). Klick auf einen Spaltenkopf **sortiert**; standardmäßig
+   sind **komplett leere Spalten ausgeblendet** (Toolbar-Häkchen zeigt sie wieder).
+5. **„Excel exportieren"** → fertige `.xlsx` (mit Autofilter; Zahlen sind echte Zahlen;
+   der Export enthält immer **alle** Spalten, auch ausgeblendete).
 
 ### Status-Spalte
 - `OK · n Kennzahlen` — automatisch erkannt, n Energie-Kennzahlen gefunden.
 - `MANUELL · kein Text (Scan?)` — PDF hat keine Textebene (eingescannt) → von Hand erfassen.
 - `MANUELL · Kennzahlen nicht gefunden` — Format weicht zu stark ab → von Hand prüfen.
+- `MANUELL · passwortgeschützt` / `MANUELL · Lesefehler (…)` — Datei nicht lesbar → von Hand prüfen.
 - **übersprungen** (nur als Zähler) — Datei ist kein Energieausweis, kommt nicht in die Tabelle.
 
-> **Browser:** Nur Chromium-basiert (Edge/Chrome). Firefox kann keine Ordner einlesen.
+> **Browser:** Chrome/Edge empfohlen (Ordner-Picker + Drag & Drop via File System Access API).
+> In Firefox/Safari öffnet „Ordner wählen" einen Dateidialog mit Ordnerauswahl (`webkitdirectory`) —
+> damit läuft das Tool auch dort. Helles und dunkles Design folgen der Systemeinstellung.
 
 ## Extrahierte Felder (Vereinigungsmenge aller OIB-Ausgaben)
 
