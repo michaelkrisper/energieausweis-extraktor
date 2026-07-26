@@ -1,6 +1,7 @@
 name: Deploy to GitHub Pages
 
-# Baut dist/index.html aus Template + vendor und deployt sie bei jedem Push auf master.
+# Testet die Engine gegen den Referenz-Korpus (100 % Pflicht), baut dist/index.html
+# aus Template + vendor und deployt sie bei jedem Push auf master.
 on:
   push:
     branches: [master]
@@ -17,7 +18,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Test-Gate: validate.js muss 100 % grün sein (Exit != 0 bei FAIL/MISS),
+  # sonst wird nicht deployt. Verhindert, dass eine kaputte Engine live geht.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Engine gegen Referenz-Korpus validieren
+        run: node test/validate.js test/samples
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages

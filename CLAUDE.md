@@ -121,10 +121,11 @@ bleiben dort bewusst leer. Workflow:
 
 ## CI / Deploy
 
-`.github/workflows/deploy-pages.yml` baut bei jedem Push auf `master` (`python3 build.py`) und deployt
-`dist/` nach GitHub Pages. **Kein Test-Gate:** Die CI ruft `validate.js` NICHT auf — vor dem Push lokal
-`node test/validate.js test/samples` grün halten, sonst geht eine kaputte Engine live. `dist/index.html`
-ist committet, wird aber im Deploy ohnehin frisch aus dem Template gebaut.
+`.github/workflows/deploy-pages.yml` läuft bei jedem Push auf `master`: erst das **Test-Gate**
+(`npm ci` + `node test/validate.js test/samples` — Exit ≠ 0 blockiert das Deploy), dann Build
+(`python3 build.py`) und Deploy von `dist/` nach GitHub Pages. Trotzdem vor dem Push lokal grün
+halten — ein roter master deployt nicht, bleibt aber rot liegen. `dist/index.html` ist committet,
+wird aber im Deploy ohnehin frisch aus dem Template gebaut.
 
 ## Designprinzip
 
