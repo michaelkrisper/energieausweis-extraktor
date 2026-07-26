@@ -1302,29 +1302,20 @@ async function pdfToText(file){
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
     const linesMap = new Map();
-    // Sort items primarily by y (descending), then by x (ascending)
-    const validItems = tc.items.filter(it => it.str && it.transform);
-    validItems.sort((a, b) => b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]);
-
-    // Cluster lines based on proximity of y coordinates instead of a fixed 2px raster
-    let currentY = null;
-    for (const it of validItems) {
-      const y = it.transform[5];
-      // cluster items with similar y (e.g. within 3px)
-      if (currentY === null || Math.abs(currentY - y) > 3) {
-        currentY = y;
-        linesMap.set(currentY, []);
-      }
-      linesMap.get(currentY).push({x: it.transform[4], w: it.width||0, s: it.str});
+    for (const it of tc.items){
+      if (!it.str || !it.transform) continue;
+      const key = Math.round(it.transform[5]/2)*2;      // y auf 2px-Raster
+      if (!linesMap.has(key)) linesMap.set(key, []);
+      linesMap.get(key).push({x: it.transform[4], w: it.width||0, s: it.str});
     }
-    const ys = [...linesMap.keys()]; // already sorted descending
+    const ys = [...linesMap.keys()].sort((a,b)=>b-a);    // oben (großes y) zuerst
     for (const y of ys){
       const parts = linesMap.get(y).sort((a,b)=>a.x-b.x);
       let line='', lastX=null;
       for (const part of parts){
         if (lastX!==null && part.x-lastX > 14) line+='  '; // Spaltenlücke -> Doppel-Space
         line += part.s;
-        lastX = part.x + (part.w || part.s.length*5);
+        lastX = part.x + part.s.length*5;
       }
       text += line+'\n';
       linePos.push({page:p, parts});
