@@ -607,6 +607,7 @@ function extract(text, linePos){
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
   r.kategorie    = reText(text, /Energieausweis f[üu]r (Sonstige konditionierte Geb[äa]ude)/i) // OIB 2023: dritte Kategorie
                  || reText(text, /\b(Einfamilienhaus|Mehrfamilienhaus|Reihenhaus|B[üu]rogeb[äa]ude)\b/i)
+                 || byLabel(lines, /Geb[äa]udekategorie\b(?!\s*laut)/i, {max:40})
                  || (/Nicht-?Wohngeb[äa]ude/i.test(text) ? 'Nichtwohngebäude'
                     : /\bWohngeb[äa]ude\b/i.test(text) ? 'Wohngebäude' : '');
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp|Geb[äa]udeart/i, {max:60})
