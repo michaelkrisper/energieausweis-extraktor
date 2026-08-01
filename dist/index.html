@@ -1103,13 +1103,13 @@ function extract(text, linePos){
   // die unsicheren Stapel-Spalten. Greifen nur, wenn diese Labels vorkommen.
   if (/AUSWEISUNG IN INSERATEN|F[ÖO]RDERANSUCHEN/i.test(text)){
     const ez = (re)=>{ const m=fg.match(re); return m?cleanNum(m[1]):''; };
-    const inserat = ez(/\bHWB\b\s*([0-3]?\d,\d{1,2})\s*kWh\/m²a/i);   // "HWB 31,5 kWh/m²a (B)"
+    const inserat = ez(/\bHWB\b\s*(\d{1,4},\d{1,2})\s*kWh\/m²a/i);   // "HWB 31,5 kWh/m²a (B)"
     if (inserat) r.hwb = inserat;
-    r.hwb_rk     = ez(/HWB\s*RK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_rk;
-    r.hwb_ref_rk = ez(/HWB\s*Ref\.?,?\s*RK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_ref_rk;
-    r.hwb_ref_sk = ez(/HWB\s*Ref\.?,?\s*SK\s*([0-3]?\d,\d{1,2})/i) || r.hwb_ref_sk;
-    r.peb        = ez(/PEB\s*SK\s*([0-9]{1,3},\d{1,2})/i) || r.peb;
-    r.co2        = ez(/CO\s*2?\s*SK\s*([0-9]{1,3},\d{1,2})/i) || r.co2;
+    r.hwb_rk     = ez(/HWB\s*RK\s*(\d{1,4},\d{1,2})/i) || r.hwb_rk;
+    r.hwb_ref_rk = ez(/HWB\s*Ref\.?,?\s*RK\s*(\d{1,4},\d{1,2})/i) || r.hwb_ref_rk;
+    r.hwb_ref_sk = ez(/HWB\s*Ref\.?,?\s*SK\s*(\d{1,4},\d{1,2})/i) || r.hwb_ref_sk;
+    r.peb        = ez(/PEB\s*SK\s*(\d{1,4},\d{1,2})/i) || r.peb;
+    r.co2        = ez(/CO\s*2?\s*SK\s*(\d{1,4},\d{1,2})/i) || r.co2;
     // Klassen: Label (HWB/fGEE) und "wert (Klasse)" stehen in getrennten Zeilen
     for (let l=0;l<lines.length;l++){
       const kl = (lines[l].match(/^\s*[\d.,]+\s*(?:kWh\/m²a)?\s*\(([A-G]\+{0,2})\)\s*$/)||[])[1];
@@ -1138,7 +1138,7 @@ function extract(text, linePos){
       }
       // Label-Zeile bevorzugen; Folgezeile nur, wenn sie selbst keinen Wert hat
       // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
-      const FGV = /(?<![\d.,])[0-9],\d{1,3}(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
+      const FGV = /(?<![\d.,])\d+,\d{1,3}(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
       const src = FGV.test(lines[l]) ? lines[l] : (lines[l+1]||''); FGV.lastIndex = 0;
       const all = src.match(FGV);
       if (!all) continue;
@@ -1150,10 +1150,10 @@ function extract(text, linePos){
     }
     return '';
   }
-  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?([0-9],\d{1,3})/i)||[])[1] || '' ;
+  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?(\d+,\d{1,3})/i)||[])[1] || '' ;
   // ETU/Vatter-Layout: fGEE-Zeile ohne Token, nur "=  0,71  0,74" (SK  Anforderung)
   if (!r.fgee && /GESAMTENERGIEEFFIZIENZ-?FAKTOR/i.test(text)){
-    for (const ln of lines){ const m = ln.match(/^\s*=\s*([0-3],\d{2})\s+[0-3],\d{2}\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
+    for (const ln of lines){ const m = ln.match(/^\s*=\s*(\d+,\d{2})\s+\d+,\d{2}\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
   }
   const fgeeSkLine = fgeeIn.last;
   r.fgee_rk  = fgeeIn('RK');
