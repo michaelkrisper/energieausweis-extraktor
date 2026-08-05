@@ -1,10 +1,10 @@
 name: Deploy to GitHub Pages
 
 # Testet die Engine gegen den Referenz-Korpus (100 % Pflicht), baut dist/index.html
-# aus Template + vendor und deployt sie bei jedem Push auf master.
+# aus Template + vendor und deployt sie bei jedem Push auf main.
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
