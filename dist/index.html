@@ -705,10 +705,28 @@ function extract(text, linePos){
   // routen über den Block-Kontext (welcher Klima-Abschnitt) bzw. das Suffix.
   const SEC_SK = /WÄRME-?\s*UND ENERGIEBEDARF|AM (?:GEBÄUDE)?STANDORT|Standortklima|am Gebäudestandort/i;
   const SEC_RK = /ANFORDERUNGEN|Referenzklima|fiktiven Referenzstandort/i;
+  // Eine Zeile schaltet den Block nur um, wenn sie im Wesentlichen die ÜBERSCHRIFT
+  // ist. Die Erklärungsprosa der Ausweise benutzt dieselben Wörter ("RK: Das
+  // Referenzklima ist ein virtuelles Klima. Es dient zur Ermittlung von …",
+  // "Kennzahlen beziehen sich auf das Standortklima.") und hat sec[] bisher mitten
+  // im Kennwertblock umgeschaltet. Fließtext-Merkmale, die Überschriften nicht
+  // haben: Satzpunkt (nicht nach Ziffer -> "2. ANFORDERUNGEN" bleibt Überschrift),
+  // Auslassungspunkte und kleingeschriebene Funktions-/Verbwörter (= Prädikat).
+  const PROSE = /\.\.\.|(?<=[^\d\s])\.(?:\s|$)|\b(?:ist|sind|wird|werden|kann|können|muss|müssen|hat|haben|gibt|dient|geben|beziehen|gelten|sich|dass|nicht|es|sie|dieser|diese|dieses|ein|eine|einem|einen|zu|auf|durch|um|von|vom)\b/;
+  // Spaltenüberschrift statt Blocküberschrift: nennt die Zeile BEIDE Klimata
+  // ("Referenzklima  Standortklima  Anforderung"), ist sie der Kopf einer
+  // Klimaspalten-Tabelle — dort entscheidet die x-Position (colValue), nicht sec[].
+  // Bisher gewann dort schlicht SEC_RK und schaltete den ganzen Rest auf RK.
+  const isColHdr = ln => /Referenzklima/i.test(ln) && /Standortklima/i.test(ln);
   // aktueller Block je Zeile vorberechnen (SK ist Default, RK schaltet um)
   const sec = [];
   let cur = 'SK';
-  for (const ln of lines){ if (SEC_RK.test(ln)) cur='RK'; else if (SEC_SK.test(ln)) cur='SK'; sec[sec.length]=cur; }
+  for (const ln of lines){
+    if (!PROSE.test(ln) && !isColHdr(ln)){
+      if (SEC_RK.test(ln)) cur='RK'; else if (SEC_SK.test(ln)) cur='SK';
+    }
+    sec[sec.length]=cur;
+  }
 
   // -- Positionslogik: Tabellen mit Klimaspalten-Überschrift ("Referenzklima
   // Standortklima  Anforderung") werden über die ECHTEN x-Positionen aufgelöst:
@@ -1009,7 +1027,8 @@ function extract(text, linePos){
   // -- Kühlung (NWG bzw. OIB 2015+): KB im Standortklima, KB* (außeninduziert,
   // kWh/m³a!) im Anforderungs-/Referenzklima-Block, KEB inkl. Kältebereitstellung.
   // Abkürzungs-Fallback ohne Section-Filter: die klimafonds-Spaltenüberschrift
-  // "Referenzklima  Standortklima  Anforderung" schaltet sec[] fälschlich auf RK.
+  // "Referenzklima  Standortklima  Anforderung" ist eine SPALTEN-, keine
+  // Blocküberschrift — sec[] ignoriert sie inzwischen, der Block davor gilt weiter.
   r.kb          = byGerman(/^\s*Kühlbedarf\b(?!\*)/i, {section:'SK'})
                || byAbbrLine(/^\s*KB(?![\w*:.,])/)
                || byAbbrLine(/^\s*KB(?![\w*:.,])/, {section:'SK'}); // GEQ-2011-Tabelle (einheitslos)
