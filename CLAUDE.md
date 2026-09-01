@@ -73,7 +73,9 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   `byLabel` hat einen Fließtext-Guard (kleingeschriebenes Wort vor dem Label = Satz, kein Feld).
 - **Berechnete Klassen:** `hwb_klasse`/`fgee_klasse` stehen oft nur in der Deckblatt-GRAFIK; die
   Klassengrenzen sind normativ fix (OIB RL6, ident 2015/2019/2023) → Fallback berechnet sie aus
-  `hwb_ref_sk`/`hwb` bzw. `fgee`.
+  `hwb_ref_sk`/`hwb` bzw. `fgee`. Gilt auch für „Sonstige konditionierte Gebäude" (nur HWB_Ref-Skala):
+  `standrae_2023_sonstige` druckt bei HWB Ref,SK = 245,0 das `F` der WG/NWG-Skala — Beleg als
+  Assertion `hwb_klasse` im Fixture.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
