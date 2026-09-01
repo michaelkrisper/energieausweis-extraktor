@@ -1184,6 +1184,9 @@ function extract(text, linePos){
   // Klassen-Fallback: Die Skalen-Buchstaben stehen oft nur in der Deckblatt-
   // GRAFIK, nicht im Textlayer. Die Klassengrenzen sind normativ fixiert
   // (OIB RL6, ident 2015/2019/2023) -> aus HWB_Ref,SK bzw. fGEE berechnen.
+  // Gilt auch für "Sonstige konditionierte Gebäude" (OIB 2023, nur HWB_Ref-Skala):
+  // deren Deckblatt ist NICHT verschoben — standrae_2023_sonstige druckt bei
+  // HWB Ref,SK = 245,0 das "F" der WG/NWG-Skala (Fixture-Assertion hwb_klasse).
   function klasse(v, grenzen){
     const n = parseFloat(v); if (!isFinite(n)) return '';
     const K = ['A++','A+','A','B','C','D','E','F'];
