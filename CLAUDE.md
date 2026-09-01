@@ -88,8 +88,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     die Folgezeile (GEQ 2023 stellt darunter „PVE =0,0").
     `byAbbrLine(abbrRe)` = einheitsstrikt und NUR auf der Abkürzungszeile selbst — für Vorarlberg-
     Stapellayouts, wo Nachbarzeilen zu anderen Kennzahlen gehören (kein Zeilenübergriff). Achtung:
-    die klimafonds-Spaltenüberschrift „Referenzklima Standortklima Anforderung" schaltet `sec[]` auf
-    RK; Abkürzungs-Fallbacks dort ohne `section`-Filter ansetzen.
+    `sec[]` schaltet nur auf **Überschriftszeilen** um — Fließtext (Satzpunkt, „…", kleingeschriebene
+    Funktions-/Verbwörter) und Klimaspalten-KÖPFE (Zeile nennt RK **und** SK, z.B. klimafonds
+    „Referenzklima Standortklima Anforderung") lassen den Block stehen. Vor jedem `sec[]`-Zugriff
+    steht `colValue`: liegen Positionsdaten vor, entscheidet die x-Position.
   - direkter Regex über `reText(text, re)` für Datum, OIB-Ausgabe, Klassen; `dateNear()` für Datum in
     der Folgezeile. Ein eawz-Block (`if (/AUSWEISUNG IN INSERATEN|FÖRDERANSUCHEN/)`) überschreibt die
     unsicheren Vorarlberg-Stapelspalten mit den sauberen Inserat-Kennzahlen.
