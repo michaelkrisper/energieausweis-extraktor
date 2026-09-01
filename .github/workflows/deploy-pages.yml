@@ -1,9 +1,12 @@
 name: Deploy to GitHub Pages
 
 # Testet die Engine gegen den Referenz-Korpus (100 % Pflicht), baut dist/index.html
-# aus Template + vendor und deployt sie bei jedem Push auf main.
+# aus Template + vendor und deployt sie bei jedem Push auf main. Auf Pull Requests
+# läuft nur das Test-Gate (kein Deploy), damit ein PR vor dem Merge rot wird.
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -12,9 +15,9 @@ permissions:
   pages: write
   id-token: write
 
-# Nur ein Deploy gleichzeitig; laufende abbrechen.
+# Nur ein Lauf je Branch/PR gleichzeitig; laufende abbrechen.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,6 +38,7 @@ jobs:
 
   deploy:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
