@@ -227,5 +227,7 @@ function loadBaseline(p) {
 		}
 	}
 
-	process.exit(totFail > 0 ? 1 : 0);
+	// MISS zählt wie FAIL: ein Soll-Feld, das gar nicht mehr extrahiert wird, ist
+	// dieselbe Regression wie ein falscher Wert — sonst wäre das CI-Gate blind dafür.
+	process.exit(totFail > 0 || totMiss > 0 ? 1 : 0);
 })();

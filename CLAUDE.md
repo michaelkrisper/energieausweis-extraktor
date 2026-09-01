@@ -16,7 +16,7 @@ Komplett offline, kein Server, keine Daten verlassen den Rechner. Voller Umfang 
 ```bash
 python3 build.py                             # src/app.template.html + vendor/*.js -> dist/index.html
 npm install                                  # pdfjs-dist (nur Dev-Harness, NICHT ausgeliefert)
-node test/validate.js test/samples 2>/dev/null         # Assert-Harness, Exit≠0 bei FAIL
+node test/validate.js test/samples 2>/dev/null         # Assert-Harness, Exit≠0 bei FAIL/MISS
 node test/validate.js test/samples --baseline 2>/dev/null   # PASS-Stand als baseline.json sichern
 node test/dump.js test/samples/<datei>.pdf 2>/dev/null  # layouttreuen pdf.js-Text eines PDFs dumpen
 ```
@@ -121,10 +121,11 @@ bleiben dort bewusst leer. Workflow:
 
 ## CI / Deploy
 
-`.github/workflows/deploy-pages.yml` läuft bei jedem Push auf `master`: erst das **Test-Gate**
-(`npm ci` + `node test/validate.js test/samples` — Exit ≠ 0 blockiert das Deploy), dann Build
+`.github/workflows/deploy-pages.yml` läuft bei jedem Push auf `main`: erst das **Test-Gate**
+(`npm install` + `node test/validate.js test/samples` — Exit ≠ 0 bei FAIL **oder** MISS blockiert
+das Deploy; `npm ci` geht nicht, weil `package-lock.json` bewusst nicht committet ist), dann Build
 (`python3 build.py`) und Deploy von `dist/` nach GitHub Pages. Trotzdem vor dem Push lokal grün
-halten — ein roter master deployt nicht, bleibt aber rot liegen. `dist/index.html` ist committet,
+halten — ein roter main deployt nicht, bleibt aber rot liegen. `dist/index.html` ist committet,
 wird aber im Deploy ohnehin frisch aus dem Template gebaut.
 
 ## Designprinzip
