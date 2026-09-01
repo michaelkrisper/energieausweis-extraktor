@@ -182,6 +182,7 @@
     <select id="statusFilter">
       <option value="">alle Status</option>
       <option value="ok">nur OK</option>
+      <option value="pruefen">nur prüfen</option>
       <option value="manuell">nur manuell</option>
     </select>
     <label class="check" title="Spalten ohne einen einzigen Wert ausblenden. Der Excel-Export enthält immer alle Spalten.">
@@ -1193,8 +1194,80 @@ function extract(text, linePos){
     for (let i=0;i<grenzen.length;i++) if (n <= grenzen[i]) return K[i];
     return 'G';
   }
-  if (!r.hwb_klasse)  r.hwb_klasse  = klasse(r.hwb_ref_sk || r.hwb, [10,15,25,50,100,150,200,250]);
-  if (!r.fgee_klasse) r.fgee_klasse = klasse(r.fgee, [0.55,0.70,0.85,1.00,1.75,2.50,3.25,4.00]);
+  const HWB_GRENZEN  = [10,15,25,50,100,150,200,250];
+  const FGEE_GRENZEN = [0.55,0.70,0.85,1.00,1.75,2.50,3.25,4.00];
+  // -- Deckblatt-Slider als Kreuzcheck --------------------------------------
+  // Das Deckblatt druckt die vier Hauptkennzahlen groß neben der Farbskala, die
+  // ZAHLEN liegen dort aber in der Grafik (im Korpus 30 von 31 PDFs) — lesbar ist
+  // nur der Skalen-BUCHSTABE je Kennzahl, spaltenweise unter dem Kopf
+  // "HWB  PEB  CO2  fGEE". Über die x-Position je Spalte gelesen: bessere Quelle
+  // als der Rechen-Fallback UND Gegenprobe gegen die Tabellen-Extraktion.
+  const KLBUCHST = /^[A-G]\+{0,2}$/;
+  function deckblattKlassen(){
+    if (!pos) return null;
+    // Kopfzeile: darf NUR aus Kennzahl-/Index-Tokens bestehen (sonst trifft man
+    // die Kennwertblock-Zeilen, die dieselben Abkürzungen führen).
+    // Die Kopfzeile ist im Textlayer in Einzel-Items zerlegt ("HWB" | "Ref,SK" |
+    // "PEB" | "SK" | "CO" | "2eq,SK" | "f" | "GEE") — jedes Item muss ein
+    // Kennzahl- oder Index-Token sein, sonst ist es keine Deckblatt-Kopfzeile.
+    const TOK = /^(?:HWB\*?(?:Ref,?)?\s*(?:SK)?|PEB\s*(?:SK)?|CO\s*2?(?:eq)?,?\s*(?:SK)?|f(?:\s*GEE)?,?\s*(?:SK)?|GEE,?\s*(?:SK)?|Ref,?\s*SK|SK|2(?:eq)?,?\s*(?:SK)?)$/i;
+    for (let l=0; l<lines.length && l<pos.length; l++){
+      const parts = pos[l].parts.filter(p=>p.s.trim());
+      if (parts.length < 2 || !parts.every(p=>TOK.test(p.s.trim()))) continue;
+      const cols = {};
+      const put = (k,x) => { if (cols[k] === undefined) cols[k] = x; };
+      for (const p of parts){
+        const t = p.s.trim();
+        if (/^HWB/i.test(t)) put('hwb', p.x);
+        else if (/^PEB/i.test(t)) put('peb', p.x);
+        else if (/^CO/i.test(t)) put('co2', p.x);
+        else if (/^f/i.test(t)) put('fgee', p.x);
+      }
+      if (cols.hwb === undefined) continue;
+      // Buchstaben stehen in den Folgezeilen, jeder auf x seiner Spalte. Schluss
+      // bei der ersten Zeile mit Fließtext (die Legende unter dem Slider).
+      const out = {};
+      for (let j=l+1; j<=l+8 && j<pos.length; j++){
+        const ps = pos[j].parts.filter(p=>p.s.trim());
+        if (!ps.length) continue;
+        if (ps.some(p=>p.s.trim().length > 4 && !TOK.test(p.s.trim()))) break;
+        for (let i=0;i<ps.length;i++){
+          let t = ps[i].s.trim();
+          // "A ++" kommt als zwei Items ("A", "++") — direkt anschließend zusammenziehen
+          const nx = ps[i+1] && ps[i+1].s.trim();
+          if (/^[A-G]$/.test(t) && /^\+{1,2}$/.test(nx || '') && ps[i+1].x - ps[i].x < 30){ t += nx; i++; }
+          if (!KLBUCHST.test(t)) continue;
+          let bk = null, bd = Infinity;
+          for (const k in cols){ const d = Math.abs(cols[k] - ps[i].x); if (d < bd){ bd = d; bk = k; } }
+          if (bd > 40) continue;                       // zu weit weg -> keine sichere Spalte
+          if (out[bk] && out[bk] !== t) return null;    // widersprüchlich -> lieber gar nichts
+          out[bk] = t;
+        }
+      }
+      if (out.hwb) return out;
+    }
+    return null;
+  }
+  const dbk = deckblattKlassen() || {};
+  // Buchstabe aus dem Dokument schlägt den Rechen-Fallback.
+  r.hwb_klasse  = r.hwb_klasse  || dbk.hwb  || klasse(r.hwb_ref_sk || r.hwb, HWB_GRENZEN);
+  r.fgee_klasse = r.fgee_klasse || dbk.fgee || klasse(r.fgee, FGEE_GRENZEN);
+  // Kreuzcheck: fällt der extrahierte Wert in ein anderes Band als der gedruckte
+  // Buchstabe, stimmt die Tabellen-Extraktion vermutlich nicht. Werte NICHT
+  // überschreiben — nur markieren (Designprinzip: lieber prüfen als still falsch).
+  // Toleranz: der Deckblattwert ist gerundet, direkt an einer Bandgrenze zählt
+  // die Abweichung nicht (±0,5 % um den extrahierten Wert).
+  function bandKonflikt(v, letter, grenzen){
+    if (!v || !letter) return '';
+    const n = parseFloat(v); if (!isFinite(n)) return '';
+    if ([n, n*0.995, n*1.005].some(x => klasse(x, grenzen) === letter)) return '';
+    return klasse(n, grenzen) + '≠' + letter;
+  }
+  const konflikt = [
+    ['HWB',  bandKonflikt(r.hwb_ref_sk || r.hwb, dbk.hwb,  HWB_GRENZEN)],
+    ['fGEE', bandKonflikt(r.fgee,                dbk.fgee, FGEE_GRENZEN)],
+  ].filter(k => k[1]).map(k => k[0] + ' ' + k[1]);
+  if (konflikt.length) r.pruefen = 'Deckblatt ≠ Tabelle (' + konflikt.join(', ') + ')';
   const DATE = /(\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4})/;
   // Datum: zuerst neben dem Label, sonst (eawz) in der Folgezeile suchen
   function dateNear(labelRe){
@@ -1290,7 +1363,7 @@ function sortData(){
 
 function statusBadge(s){
   const span = document.createElement('span');
-  span.className = 'badge '+(s.toLowerCase().includes('manuell') ? 'warn' : 'ok');
+  span.className = 'badge '+(/manuell|prüfen/i.test(s) ? 'warn' : 'ok');
   span.textContent = s;
   return span;
 }
@@ -1316,9 +1389,10 @@ function render(){
   tb.innerHTML = '';
   let shown = 0;
   DATA.forEach(d=>{
-    const isManuell = d.status.toLowerCase().includes('manuell');
-    if (sf==='ok' && isManuell) return;
-    if (sf==='manuell' && !isManuell) return;
+    const st = d.status.toLowerCase();
+    if (sf==='ok' && !st.startsWith('ok')) return;
+    if (sf==='manuell' && !st.includes('manuell')) return;
+    if (sf==='pruefen' && !st.includes('prüfen')) return;
     if (q){
       const hay = COLUMNS.map(c=>String(d[c.key]||'')).join(' ').toLowerCase();
       if (!hay.includes(q)) return;
@@ -1492,6 +1566,10 @@ async function runScan(list){
         const got = KENNZAHLEN.filter(k=>row[k]).length;
         if (!row.hwb && !row.fgee && !row.peb && !row.hwb_ref_sk && !row.lek){
           row.status = 'MANUELL · Kennzahlen nicht gefunden';
+        } else if (row.pruefen){
+          // Deckblatt-Kreuzcheck widerspricht der Tabelle -> Wert steht da, ist
+          // aber verdächtig. Zahlen bleiben unangetastet, nur der Status warnt.
+          row.status = 'PRÜFEN · ' + row.pruefen;
         } else {
           row.status = 'OK · '+got+' Kennzahlen';
         }

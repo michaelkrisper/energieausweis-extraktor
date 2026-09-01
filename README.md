@@ -22,6 +22,9 @@ Browser**, kein Server, keine Installation, keine Daten verlassen den Rechner.
 
 ### Status-Spalte
 - `OK · n Kennzahlen` — automatisch erkannt, n Energie-Kennzahlen gefunden.
+- `PRÜFEN · Deckblatt ≠ Tabelle (…)` — die Kennzahl aus dem Kennwertblock fällt in ein anderes
+  Energieklassen-Band als der Buchstabe, den das Deckblatt selbst druckt. Die Werte bleiben stehen
+  (nichts wird überschrieben), aber die Zeile gehört angesehen.
 - `MANUELL · kein Text (Scan?)` — PDF hat keine Textebene (eingescannt) → von Hand erfassen.
 - `MANUELL · Kennzahlen nicht gefunden` — Format weicht zu stark ab → von Hand prüfen.
 - `MANUELL · passwortgeschützt` / `MANUELL · Lesefehler (…)` — Datei nicht lesbar → von Hand prüfen.

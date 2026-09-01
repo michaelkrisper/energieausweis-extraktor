@@ -76,6 +76,14 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   `hwb_ref_sk`/`hwb` bzw. `fgee`. Gilt auch für „Sonstige konditionierte Gebäude" (nur HWB_Ref-Skala):
   `standrae_2023_sonstige` druckt bei HWB Ref,SK = 245,0 das `F` der WG/NWG-Skala — Beleg als
   Assertion `hwb_klasse` im Fixture.
+- **Deckblatt-Kreuzcheck (`deckblattKlassen()`):** Die vier großen Deckblatt-ZAHLEN liegen in der
+  Grafik (30 von 31 Korpus-PDFs), der Skalen-BUCHSTABE je Kennzahl steht aber im Textlayer —
+  spaltenweise unter dem Kopf „HWB PEB CO2 fGEE", per x-Position zugeordnet (15 von 31 PDFs lesbar,
+  Rest bewusst leer statt geraten). Er ist die bessere Quelle für `hwb_klasse`/`fgee_klasse` als der
+  Rechen-Fallback und dient als Gegenprobe: fällt der extrahierte Wert in ein anderes Band als der
+  gedruckte Buchstabe (Toleranz ±0,5 % gegen Rundung an der Bandgrenze), setzt `extract()`
+  `r.pruefen` und `runScan` daraus den Status `PRÜFEN · Deckblatt ≠ Tabelle`. Werte werden NIE
+  überschrieben.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
