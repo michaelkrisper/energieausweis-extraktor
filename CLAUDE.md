@@ -53,7 +53,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 - `COLUMNS` — Spaltensatz = **Vereinigungsmenge aller OIB-Ausgaben** (2011/2015/2019/2023). Reihenfolge
   = Excel-Reihenfolge. Fehlt ein Wert in einer Ausgabe, bleibt die Spalte leer. Hauptspalten
   (`hwb`, `eeb`, `peb`, `co2`, `fgee`) führen den **Standortklima-Wert** (realer Bedarf / Inserat-Zahl);
-  RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `fgee_rk`).
+  RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `peb_rk`,
+  `co2_rk`, `fgee_rk`; `peb_rk`/`co2_rk` druckt der OIB-2015+-Anforderungsblock von ECOTECH/BuildDesk).
   Dazu die vollen OIB-2015+-Kennwertblöcke (`kb`, `kb_stern_rk` [kWh/m³a!], `keb`, `hhsb`, `bsb`,
   `befeb`, `beleb`, `peb_nern`, `peb_ern`, `peb_heb_nern_rk` [OIB 2023: PEB n.ern. für RH+WW(+Bel), RK],
   `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts (`huellflaeche`, `soll_innen`, `bauweise`,
@@ -71,6 +72,20 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   AUSSCHLIESSLICH aus Header-Tokens besteht (Prosa zählt nicht). `numAboveLabel()` holt x-ausgerichtete
   Werte aus der Zeile ÜBER dem Label (AX3000 stapelt `0,29  -16,0` über „mittlerer U-Wert … Norm-Außen…").
   `byLabel` hat einen Fließtext-Guard (kleingeschriebenes Wort vor dem Label = Satz, kein Feld).
+- **Positionslogik in Anforderungszeilen (`istRight`/`dropLimits`):** Alle Layout-Familien des Korpus
+  drucken eine Anforderungszeile gleich: `Bezeichnung | [erfüllt] | Anforderung | Abkürzung | IST-Wert`
+  (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die
+  Grenze. `istRight()` löst das über eine zeichengenaue x-Karte der Zeile (`xmap`, gleiche Rekonstruktion
+  wie `pdfToText`, damit auch Treffer über mehrere pdf.js-Items wie „HWB " + „Ref,SK" verortbar sind) und
+  bezieht die direkten Nachbarzeilen derselben Seite mit ein — der y-Bucket zerlegt eine Tabellenzeile oft
+  in zwei Textzeilen (Wert oben, Abkürzung darunter). Die Zeile der Abkürzung gewinnt immer zuerst;
+  Nachbarzeilen gehören sonst zur NÄCHSTEN Kennzahl (`ownRow`-Flag schaltet sie ganz ab). `dropLimits()`
+  wirft Werte raus, über/unter denen das Subskript `…,zul` steht (GEQ: „f GEE,RK = 0,43 entspricht
+  f GEE,RK,zul = 0,75"). Das ersetzt die ordinalen Weichen „erster Wert der Zeile" / „letzter Wert" /
+  „rechts, sonst links" — die je nach Layout in die entgegengesetzte Richtung rieten und dort, wo die
+  Zeilenrekonstruktion anders schneidet, den ANFORDERUNGSWERT lieferten (belegt an `iu_2019_wg`:
+  `HWB Ref,RK` war 29,18 = `HWB_Ref,RK,zul` = 16·(1+3,0/l_c), Ist ist 24,29). Textlogik bleibt als
+  Fallback, wenn keine Positionsdaten vorliegen.
 - **Berechnete Klassen:** `hwb_klasse`/`fgee_klasse` stehen oft nur in der Deckblatt-GRAFIK; die
   Klassengrenzen sind normativ fix (OIB RL6, ident 2015/2019/2023) → Fallback berechnet sie aus
   `hwb_ref_sk`/`hwb` bzw. `fgee`. Gilt auch für „Sonstige konditionierte Gebäude" (nur HWB_Ref-Skala):

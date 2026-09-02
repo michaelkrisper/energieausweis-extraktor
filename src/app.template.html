@@ -306,6 +306,7 @@ const COLUMNS = [
   {key:'eeb',            label:'EEB SK kWh/m²a',           edit:true},
   {key:'eeb_rk',         label:'EEB RK kWh/m²a',           edit:true},
   {key:'peb',            label:'PEB SK kWh/m²a',           edit:true},
+  {key:'peb_rk',         label:'PEB RK kWh/m²a',           edit:true},
   {key:'peb_nern',       label:'PEB n.ern. SK kWh/m²a',    edit:true},
   {key:'peb_ern',        label:'PEB ern. SK kWh/m²a',      edit:true},
   {key:'peb_heb_nern_rk',label:'PEB HEB(+BelEB),n.ern.,RK kWh/m²a', edit:true},
@@ -313,6 +314,7 @@ const COLUMNS = [
   {key:'fgee_rk',        label:'fGEE,RK',                  edit:true},
   {key:'fgee_klasse',    label:'fGEE-Klasse',              edit:true},
   {key:'co2',            label:'CO2eq,SK kg/m²a',          edit:true},
+  {key:'co2_rk',         label:'CO2eq,RK kg/m²a',          edit:true},
   {key:'pve',            label:'PVE SK kWh/m²a',           edit:true},
   {key:'ern_anteil',     label:'Erneuerbarer Anteil',      edit:true},
   {key:'lek',            label:'LEK(T)-Wert',              edit:true},
@@ -330,7 +332,7 @@ const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','huellflaeche','
   'seehoehe','heizgradtage','norm_aussen','soll_innen','heiztage','solarthermie','photovoltaik','stromspeicher','heizlast',
   'hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','kb','kb_stern_rk','keb','wwwb',
   'heb','hteb','eawz_ww','eawz_rh','eawz_h','eawz_k','hhsb','bsb','befeb','beleb',
-  'eeb','eeb_rk','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','lek','fgee','fgee_rk']);
+  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
 const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','kb','keb','wwwb','heb','hteb','hhsb','bsb','befeb','beleb',
   'eeb','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','fgee','lek'];
@@ -793,6 +795,129 @@ function extract(text, linePos){
     return '';
   }
 
+  // -- Positionslogik für ANFORDERUNGSZEILEN -------------------------------
+  // Alle drei Layout-Familien des Korpus drucken eine Anforderungszeile gleich:
+  //   Bezeichnung | [erfüllt] | Anforderung | Abkürzung | IST-Wert
+  // GEQ     "Referenz-Heizwärmebedarf  62,7 kWh/m²a  erfüllt  HWB[Ref,RK]  61,0 kWh/m²a"
+  // ArchiPH "Referenz-Heizwärmebedarf  48,53 kWh/m²a ≥ 33,50 kWh/m²a  erfüllt HWB[Ref,RK]"
+  // ECOTECH "… Anforderung 74,2 kWh/m²a  nicht erfüllt  99,8 kWh/m²a"
+  // Der Ist-Wert ist damit IMMER der Wert RECHTS der Abkürzung — die bisherigen
+  // Weichen ("erster Wert der Zeile" / "letzter Wert" / "rechts, sonst links")
+  // rieten je Layout in die entgegengesetzte Richtung und lieferten dort, wo die
+  // Zeilenrekonstruktion die Zeile anders zerlegt, den ANFORDERUNGSWERT.
+  // Zeichen-genaue x-Karte einer Textzeile (dieselbe Rekonstruktion wie in
+  // pdfToText: Lücke > 14 -> zwei Leerzeichen). Nötig, weil Treffer über mehrere
+  // pdf.js-Items gehen können ("HWB " + "Ref,SK") — tokenCx allein reicht nicht.
+  const XMAP = [];
+  function xmap(l){
+    if (!pos || !pos[l]) return null;
+    if (XMAP[l] !== undefined) return XMAP[l];
+    let s = '', lastX = null; const cx = [];
+    for (const p of pos[l].parts){
+      if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); }
+      const cw = p.s.length ? (p.w || p.s.length*5) / p.s.length : 5;
+      for (let i=0;i<p.s.length;i++){ s += p.s[i]; cx.push(p.x + (i+0.5)*cw); }
+      lastX = p.x + p.s.length*5;
+    }
+    return (XMAP[l] = {s, cx});
+  }
+  // x-Mitte des ersten Treffers von re in Zeile l (null = keine Positionsdaten
+  // oder kein Treffer)
+  function xAt(l, re){
+    const m = xmap(l); if (!m) return null;
+    const hit = m.s.match(re); if (!hit) return null;
+    return m.cx[hit.index + (hit[0].length >> 1)];
+  }
+  // Werte rechts von x0 auf Zeile l. valRe muss die Zahl in Gruppe 1 liefern.
+  function valsRight(l, x0, valRe){
+    const m = xmap(l); if (!m) return [];
+    const re = new RegExp(valRe.source, 'ig'); const out = [];
+    for (let g; (g = re.exec(m.s)) !== null; ){
+      const cx = m.cx[g.index];
+      if (cx !== undefined && cx > x0) out.push({v: cleanNum(g[1]), cx});
+    }
+    return out;
+  }
+  // Ist-Wert einer Anforderungszeile: der am weitesten LINKS stehende Wert, der
+  // noch RECHTS der Abkürzung liegt. Fenster sind Zeile l und ihre direkten
+  // Nachbarzeilen derselben Seite: die Zeilenrekonstruktion zerlegt eine
+  // Tabellenzeile wegen minimal unterschiedlicher Baselines (y-Bucket) oft in
+  // zwei Textzeilen — Wert oben, Abkürzung darunter (ArchiPHYSIK 13/17).
+  // ownRow: nur die Zeile selbst auswerten (Aufrufer, die Nachbarzeilen schon
+  // anders behandeln — dort gehört die Nachbarzeile zur NÄCHSTEN Kennzahl).
+  function istRight(l, abbrRe, unit, ownRow){
+    if (!pos || !pos[l]) return '';
+    const valRe = unit === ''
+      ? /((?<![\d.,])\d+,\d+(?!\d))(?!\s*(?:kWh|kg|MJ|kWp|m²|m³|W\b|°|%))/
+      : new RegExp('('+NUMRE+')\\s*'+(unit || 'kWh\\/m²a'));
+    const rows = [];
+    for (const d of (ownRow ? [0] : [0,1,-1])) if (pos[l+d] && pos[l+d].page === pos[l].page) rows.push(l+d);
+    let ax = null, ar = null;
+    for (const i of rows){ const x = xAt(i, abbrRe); if (x !== null){ ax = x; ar = i; break; } }
+    if (ax === null) return '';
+    // Zeile der Abkürzung zuerst; erst wenn sie leer ist, die Nachbarzeilen (die
+    // gehören meist zur NÄCHSTEN Kennzahl -> nie mit der eigenen Zeile mischen).
+    for (const i of [ar, ...rows.filter(x => x !== ar)]){
+      let best = null;
+      for (const c of valsRight(i, ax + 2, valRe)) if (!best || c.cx < best.cx) best = c;
+      if (best) return best.v;
+    }
+    if (unit === '') return '';
+    // ArchiPHYSIK 13 zieht die Einheit der Wertspalte auf die Zeile der Abkürzung
+    // ("erfüllt 29,18kWh/m²a HWBRef,RK   kWh/m²a"), der Ist-Wert steht nackt in
+    // der Nachbarzeile darüber. Dann zählt die nackte Dezimalzahl rechts der
+    // Abkürzung — aber nur, wenn im Fenster rechts davon wirklich eine Einheit
+    // dieser Spalte steht (sonst wäre jede Zahl der Nachbarzeile ein Kandidat).
+    const U = unit || 'kWh\\/m²a';
+    // "- kWh/m²a" = Wert bewusst leer (GEQ) -> nichts aus der Nachbarzeile holen.
+    const dash = xAt(ar, new RegExp('-\\s*'+U,'i'));
+    if (dash !== null && dash > ax) return '';
+    let ux = null;
+    for (const i of rows){ const x = xAt(i, new RegExp('(?<![\\d,.])\\s*'+U,'i')); if (x !== null && x > ax){ ux = x; break; } }
+    if (ux === null) return '';
+    // Der nackte Wert muss in der Einheiten-Spalte stehen (Einheit folgt ihm
+    // unmittelbar), sonst ist es die Zahl einer anderen Kennzahl.
+    for (const i of rows.filter(x => x !== ar)){
+      let best = null;
+      for (const c of valsRight(i, ax + 2, /(?<![\d.,])(\d+,\d+)(?!\d)/))
+        if (c.cx < ux && ux - c.cx < 60 && (!best || c.cx < best.cx)) best = c;
+      if (best) return best.v;
+    }
+    return '';
+  }
+  // x-Positionen der ANFORDERUNGS-Marker im Zeilenfenster um l. GEQ hängt an die
+  // Abkürzung des Grenzwerts das Subskript "zul" ("f GEE,RK = 0,43  entspricht
+  // f GEE,RK,zul = 0,75") — und druckt dieses Subskript als eigene Textzeile über
+  // bzw. unter der Wertzeile. Über die x-Position ist damit bestimmbar, WELCHER
+  // Wert der Zeile die Anforderung ist; die bisherige Weiche ("bei 'entspricht'
+  // der erste, sonst der letzte Wert") hat das nur aus der Reihenfolge geraten.
+  function limitCx(l){
+    const out = [];
+    if (!pos || !pos[l]) return out;
+    for (const d of [0,-1,1]){
+      if (!pos[l+d] || pos[l+d].page !== pos[l].page) continue;
+      const m = xmap(l+d); if (!m) continue;
+      const re = /,\s*zul\b|zul[äa]ssig|,\s*max\b/gi;
+      for (let g; (g = re.exec(m.s)) !== null; ) if (m.cx[g.index] !== undefined) out.push(m.cx[g.index]);
+    }
+    return out;
+  }
+  // Werte aus vals (Strings wie in der Zeile), die NICHT in einer Anforderungs-
+  // spalte stehen. Der Marker sitzt am Subskript, also leicht links des Werts
+  // bzw. direkt darunter -> Fenster [marker-40, marker+120].
+  function dropLimits(l, vals){
+    const lim = limitCx(l); if (!lim.length) return vals;
+    const m = xmap(l); if (!m) return vals;
+    const keep = []; const re = /(?<![\d.,])\d+,\d+(?!\d)/g;
+    for (let g; (g = re.exec(m.s)) !== null; ){
+      if (vals.indexOf(g[0]) < 0) continue;
+      const cx = m.cx[g.index];
+      if (cx !== undefined && lim.some(L => cx > L - 40 && cx < L + 120)) continue;
+      keep.push(g[0]);
+    }
+    return keep.length ? keep : vals;
+  }
+
   // letzter spezifischer kWh/m²a-Wert auf einer Zeile (das ist der spez. Bedarf,
   // nicht die absolute kWh/a-Zahl davor)
   // Anforderungszeile mit "≥" (ArchiPHYSIK: "48,53kWh/m²a≥  33,50kWh/m²a"):
@@ -832,6 +957,10 @@ function extract(text, linePos){
       }
       if (opt.suffix && !opt.suffix.test(lines[l]) && !opt.suffix.test(lines[l+1]||'')) continue;
       if (opt.notSuffix && (opt.notSuffix.test(lines[l]) || opt.notSuffix.test((lines[l+1]||'').trim().slice(0,12)))) continue;
+      // Positionslogik vor Textlogik: steht die Abkürzung der Kennzahl auf der
+      // Zeile, ist der Ist-Wert der Wert RECHTS davon — links davon steht in
+      // Anforderungszeilen die Grenze ("75,69 kWh/m²a | E/LEB,RK | 69,82 kWh/m²a").
+      if (opt.abbr){ const pa = istRight(l, opt.abbr, opt.unit, true); if (pa) return pa; }
       let scope = lines[l];
       // GEQ-Anforderungszeile: "<dt.Label> 49,7 ...erfüllt  HWB 35,9" -> Wert nach
       // der Abkürzung ist der Bedarfswert (links steht die Anforderungsgrenze).
@@ -870,6 +999,10 @@ function extract(text, linePos){
         if (pv !== null){ if (pv !== '') return pv; continue; }
         if (sec[l]!==opt.section) continue;
       }
+      // Positionslogik zuerst: der Ist-Wert steht rechts der Abkürzung — auch
+      // dann, wenn die Zeilenrekonstruktion ihn in die Nachbarzeile gelegt hat.
+      const px = istRight(l, abbrRe, opt.unit);
+      if (px) return px;
       const right = lines[l].slice(ai).match(vre);
       if (right) return cleanNum(right[1]);
       const leftPart = afterGE(lines[l].slice(0,ai), unit);
@@ -933,18 +1066,24 @@ function extract(text, linePos){
   // up: ArchiPHYSIK bricht den EEB um ("kWh/a  61,12" ueber
   // "Endenergiebedarf  42.443   EEB SK  kWh/m²a"); ohne die Vorzeile faellt
   // die Suche auf den PEB der Folgezeile durch.
-  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i, up:true})
-          || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'SK'})
+  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i, up:true, abbr:/\bEEB\b/})
+          || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'SK', abbr:/\bE\s*\/\s*LEB/})
           || byAbbr(/\bEEB\b(?!.*RK)/i);
-  r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i})
-          || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'RK'});
+  r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i, abbr:/\bEEB\b/})
+          || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'RK', abbr:/\bE\s*\/\s*LEB/});
   r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK'})
           || byGerman(/Prim[äa]renergiebedarf\b/i, {})
           || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i);
+  // OIB-2015+-Anforderungsblock im Referenzklima: PEB und CO2eq gibt es dort als
+  // eigene RK-Kennzahl ("Primärenergiebedarf   PEB RK   169,1 kWh/m²a",
+  // ECOTECH/BuildDesk) — sie vervollständigen den RK-Satz neben HWB/EEB/fGEE RK.
+  // PEB-n.ern./-ern. RK bleiben bewusst ohne Spalte (nur 2 Belege im Korpus).
+  r.peb_rk = byAbbrAdjacent(/\bPEB[\s,]*RK\b/i, {});
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a')    // OCR: "CO," statt "CO2"
           || byAbbr(/^\s*CO\s*$/, 'kg\\/m²a');  // ECOTECH stapelt: "CO" / "2  41.155 kg/a  52,8 kg/m²a"
+  r.co2_rk = byAbbrAdjacent(/\bCO2(?:eq)?[\s,]*RK\b/i, {unit:'kg\\/m²a'});
   // Wert NUR auf der Abkürzungszeile selbst (Vorarlberg-Stapellayout: Nachbar-
   // zeilen gehören zu ANDEREN Kennzahlen, daher kein Zeilenübergriff wie bei
   // byAbbrAdjacent). Abkürzung muss am Zeilenanfang stehen ("KB   3,2 kWh/m²a").
@@ -1096,7 +1235,8 @@ function extract(text, linePos){
       // Label-Zeile bevorzugen; Folgezeile nur, wenn sie selbst keinen Wert hat
       // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
       const FGV = /(?<![\d.,])\d+,\d+(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
-      const src = FGV.test(lines[l]) ? lines[l] : (lines[l+1]||''); FGV.lastIndex = 0;
+      const sl = FGV.test(lines[l]) ? l : l+1; FGV.lastIndex = 0;
+      const src = lines[sl] || '';
       // fGEE ist dimensionslos. Eine Zeile, deren Zahlen alle eine Energieeinheit
       // tragen, ist nicht die fGEE-Zeile, auch wenn sie "fGEE" erwähnt —
       // ArchiPHYSIK schreibt "erfüllt (alternativ zu f GEE)  92,59kWh/m²a ≥ …".
@@ -1106,11 +1246,19 @@ function extract(text, linePos){
       }
       FGV.lastIndex = 0;
       if (!all.length) continue;
-      // "0,43 entspricht 0,75": Ist VOR der Anforderung -> erster Wert.
       fgeeIn.last = l;                                   // Fundzeile für den RK==SK-Vergleich
-      if (/entspricht|zul[.,]?\s*=/i.test(src)) return cleanNum(all[0]);
-      // "0,900  0,817" (Anforderung + Ist) -> Ist = letzter Wert. Sonst einziger.
-      return cleanNum(all[all.length-1]);
+      // Positionslogik statt Reihenfolge-Weiche: Werte, deren Abkürzungs-Subskript
+      // "zul" trägt, sind die Anforderung und fallen raus (GEQ-Vergleichszeile).
+      const ist = dropLimits(sl, all);
+      if (ist.length === 1) return cleanNum(ist[0]);
+      // Zweite Positionsquelle: der Ist-Wert steht rechts der Abkürzung
+      // (ArchiPHYSIK 13: "0,900 | fGEE | 0,817" über zwei Textzeilen verteilt).
+      const px = istRight(sl, /f\s*GEE|fGEE/i, '');
+      if (px && ist.indexOf(px.replace('.',',')) >= 0) return px;
+      // Ohne Positionsdaten bleibt die Textweiche: "0,43 entspricht 0,75" nennt
+      // den Ist-Wert zuerst, "0,900  0,817" (Anforderung + Ist) zuletzt.
+      if (/entspricht|zul[.,]?\s*=/i.test(src)) return cleanNum(ist[0]);
+      return cleanNum(ist[ist.length-1]);
     }
     return '';
   }
