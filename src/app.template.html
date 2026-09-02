@@ -495,7 +495,10 @@ function extract(text, linePos){
   }
   if (!/\d{4}/.test(r.plz_ort))
     r.plz_ort = reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|Stra[ßs]e|Erbaut|Baujahr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
-  r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28});
+  r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28})
+  // "Katastralgemeinde: 23421 Maiersdorf" — die KG-Nummer steht im Feld KG-Nr.,
+  // der Name ist der Textteil. KG-Namen beginnen nie mit einer Ziffer.
+                     .replace(/^\d{3,5}\s+(?=\D)/, '');
   // AX3000 stellt den Ortsnamen zellenversetzt in die Zeile ÜBER das Label
   // ("Wohnen  Knittelfeld" / "Gebäudezone   Katastralgemeinde") — greift byLabel
   // dort das nächste LABEL ab, per Zellenindex aus der Vorzeile korrigieren.
@@ -927,7 +930,10 @@ function extract(text, linePos){
   r.hteb   = byAbbr(/\bHTEB\b(?!\s*[-,]?\s*RH)/i, undefined, {last:true});
   // ECOTECH 2015 / ArchiPHYSIK 16 nennen den EEB "End-/Lieferenergiebedarf"
   // (bzw. "E/LEB") — das notSuffix-Lieferenergie gilt nur dem Erklärungstext.
-  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i})
+  // up: ArchiPHYSIK bricht den EEB um ("kWh/a  61,12" ueber
+  // "Endenergiebedarf  42.443   EEB SK  kWh/m²a"); ohne die Vorzeile faellt
+  // die Suche auf den PEB der Folgezeile durch.
+  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i, up:true})
           || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'SK'})
           || byAbbr(/\bEEB\b(?!.*RK)/i);
   r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i})
@@ -1232,7 +1238,17 @@ function extract(text, linePos){
                || reText(text, /G[üu]ltig(?:keitsdatum|keit)?\s*(?:bis)?\s*[: ]*\s?(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i)
                || dateNear(/G[üu]ltig(?:keit)?\s*bis|G[üu]ltigkeitsdatum/i);
   r.gueltig_bis = r.gueltig_bis.replace(/\.\s+/g,'.'); // "1. 1. 2027" -> "1.1.2027"
-  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:60});
+  // "ErstellerIn Nummer: (keine)" ist die Ersteller-NUMMER, nicht der Name.
+  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)|erstellt durch/i, {max:60});
+  // ArchiPHYSIK setzt das Label ans Zeilenende ("GWR-Zahl  k. A.  ErstellerIn")
+  // und den Namen in die Folgezeile.
+  if (!r.aussteller){
+    for (let l=0;l<lines.length-1;l++){
+      if (!/(?:Ausstellerin|ErstellerIn)\s*$/i.test(lines[l])) continue;
+      const dn = cells(lines[l+1]).join(' ').trim();
+      if (/[A-Za-z]{3}/.test(dn) && !/^(?:ERSTELLT|Unterschrift)/i.test(dn)){ r.aussteller = dn.slice(0,60); break; }
+    }
+  }
   // AX3000: "BM Ing. Kuprian  B&K Realplan Bau GmbH." steht ÜBER der Labelzeile
   // "ErstellerIn   Organisation" -> die Labelzeile selbst liefert nur "Organisation".
   if (/^Organisation$/i.test(r.aussteller)){
