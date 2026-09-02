@@ -53,7 +53,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 - `COLUMNS` — Spaltensatz = **Vereinigungsmenge aller OIB-Ausgaben** (2011/2015/2019/2023). Reihenfolge
   = Excel-Reihenfolge. Fehlt ein Wert in einer Ausgabe, bleibt die Spalte leer. Hauptspalten
   (`hwb`, `eeb`, `peb`, `co2`, `fgee`) führen den **Standortklima-Wert** (realer Bedarf / Inserat-Zahl);
-  RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `fgee_rk`).
+  RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `peb_rk`,
+  `co2_rk`, `fgee_rk`; `peb_rk`/`co2_rk` druckt der OIB-2015+-Anforderungsblock von ECOTECH/BuildDesk).
   Dazu die vollen OIB-2015+-Kennwertblöcke (`kb`, `kb_stern_rk` [kWh/m³a!], `keb`, `hhsb`, `bsb`,
   `befeb`, `beleb`, `peb_nern`, `peb_ern`, `peb_heb_nern_rk` [OIB 2023: PEB n.ern. für RH+WW(+Bel), RK],
   `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts (`huellflaeche`, `soll_innen`, `bauweise`,

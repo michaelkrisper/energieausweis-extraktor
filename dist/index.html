@@ -390,6 +390,7 @@ const COLUMNS = [
   {key:'eeb',            label:'EEB SK kWh/m²a',           edit:true},
   {key:'eeb_rk',         label:'EEB RK kWh/m²a',           edit:true},
   {key:'peb',            label:'PEB SK kWh/m²a',           edit:true},
+  {key:'peb_rk',         label:'PEB RK kWh/m²a',           edit:true},
   {key:'peb_nern',       label:'PEB n.ern. SK kWh/m²a',    edit:true},
   {key:'peb_ern',        label:'PEB ern. SK kWh/m²a',      edit:true},
   {key:'peb_heb_nern_rk',label:'PEB HEB(+BelEB),n.ern.,RK kWh/m²a', edit:true},
@@ -397,6 +398,7 @@ const COLUMNS = [
   {key:'fgee_rk',        label:'fGEE,RK',                  edit:true},
   {key:'fgee_klasse',    label:'fGEE-Klasse',              edit:true},
   {key:'co2',            label:'CO2eq,SK kg/m²a',          edit:true},
+  {key:'co2_rk',         label:'CO2eq,RK kg/m²a',          edit:true},
   {key:'pve',            label:'PVE SK kWh/m²a',           edit:true},
   {key:'ern_anteil',     label:'Erneuerbarer Anteil',      edit:true},
   {key:'lek',            label:'LEK(T)-Wert',              edit:true},
@@ -414,7 +416,7 @@ const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','huellflaeche','
   'seehoehe','heizgradtage','norm_aussen','soll_innen','heiztage','solarthermie','photovoltaik','stromspeicher','heizlast',
   'hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','kb','kb_stern_rk','keb','wwwb',
   'heb','hteb','eawz_ww','eawz_rh','eawz_h','eawz_k','hhsb','bsb','befeb','beleb',
-  'eeb','eeb_rk','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','lek','fgee','fgee_rk']);
+  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
 const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','kb','keb','wwwb','heb','hteb','hhsb','bsb','befeb','beleb',
   'eeb','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','fgee','lek'];
@@ -1156,10 +1158,16 @@ function extract(text, linePos){
   r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK'})
           || byGerman(/Prim[äa]renergiebedarf\b/i, {})
           || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i);
+  // OIB-2015+-Anforderungsblock im Referenzklima: PEB und CO2eq gibt es dort als
+  // eigene RK-Kennzahl ("Primärenergiebedarf   PEB RK   169,1 kWh/m²a",
+  // ECOTECH/BuildDesk) — sie vervollständigen den RK-Satz neben HWB/EEB/fGEE RK.
+  // PEB-n.ern./-ern. RK bleiben bewusst ohne Spalte (nur 2 Belege im Korpus).
+  r.peb_rk = byAbbrAdjacent(/\bPEB[\s,]*RK\b/i, {});
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a')    // OCR: "CO," statt "CO2"
           || byAbbr(/^\s*CO\s*$/, 'kg\\/m²a');  // ECOTECH stapelt: "CO" / "2  41.155 kg/a  52,8 kg/m²a"
+  r.co2_rk = byAbbrAdjacent(/\bCO2(?:eq)?[\s,]*RK\b/i, {unit:'kg\\/m²a'});
   // Wert NUR auf der Abkürzungszeile selbst (Vorarlberg-Stapellayout: Nachbar-
   // zeilen gehören zu ANDEREN Kennzahlen, daher kein Zeilenübergriff wie bei
   // byAbbrAdjacent). Abkürzung muss am Zeilenanfang stehen ("KB   3,2 kWh/m²a").
