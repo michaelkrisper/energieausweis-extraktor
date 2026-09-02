@@ -495,7 +495,10 @@ function extract(text, linePos){
   }
   if (!/\d{4}/.test(r.plz_ort))
     r.plz_ort = reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|Stra[ßs]e|Erbaut|Baujahr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
-  r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28});
+  r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28})
+  // "Katastralgemeinde: 23421 Maiersdorf" — die KG-Nummer steht im Feld KG-Nr.,
+  // der Name ist der Textteil. KG-Namen beginnen nie mit einer Ziffer.
+                     .replace(/^\d{3,5}\s+(?=\D)/, '');
   // AX3000 stellt den Ortsnamen zellenversetzt in die Zeile ÜBER das Label
   // ("Wohnen  Knittelfeld" / "Gebäudezone   Katastralgemeinde") — greift byLabel
   // dort das nächste LABEL ab, per Zellenindex aus der Vorzeile korrigieren.
@@ -792,13 +795,27 @@ function extract(text, linePos){
 
   // letzter spezifischer kWh/m²a-Wert auf einer Zeile (das ist der spez. Bedarf,
   // nicht die absolute kWh/a-Zahl davor)
-  function specOnLine(line, unit){
+  // Anforderungszeile mit "≥" (ArchiPHYSIK: "48,53kWh/m²a≥  33,50kWh/m²a"):
+  // links steht die Anforderungsgrenze, rechts der Ist-Wert. Nur kürzen, wenn
+  // rechts tatsächlich noch ein einheitsbehafteter Wert folgt.
+  function afterGE(line, unit){
+    const ge = line.indexOf('≥'); if (ge < 0) return line;
+    const rest = line.slice(ge+1);
+    return new RegExp('('+NUMRE+')\\s*'+unit,'i').test(rest) ? rest : line;
+  }
+  // geRow: die Zeile gehört zu einer Anforderungszeile mit "≥". ArchiPHYSIK
+  // schreibt die Einheiten dann in die Folgezeile ("erfüllt kWh/m³a≥KB* RK") und
+  // lässt die Zahlen nackt stehen ("1,00  0,11") — Reihenfolge Grenze, dann Ist.
+  function specOnLine(line, unit, geRow){
     unit = unit || 'kWh\\/m²a';
+    line = afterGE(line, unit);
     // erster Wert mit Einheit = der reale Bedarf; spätere Spalten sind
     // Anforderung/Referenz (klassische Tabellen führen die Anforderung rechts).
     const m = line.match(new RegExp('('+NUMRE+')\\s*'+unit,'i'));
     if (m) return cleanNum(m[1]);
-    const sc = shortCommas(line); return sc.length ? cleanNum(sc[0]) : '';
+    const sc = shortCommas(line);
+    if (!sc.length) return '';
+    return cleanNum(geRow ? sc[sc.length-1] : sc[0]);
   }
   // Wert über deutsche Bezeichnung (labelRe) holen; opt.section filtert RK/SK,
   // opt.suffix verlangt zusätzlich ein Index-Suffix (auf Zeile oder Folgezeile).
@@ -832,9 +849,10 @@ function extract(text, linePos){
       // ArchiPHYSIK stellt den Wert z.T. in die Zeile ÜBER das Label.
       // Folgezeile nur nutzen, wenn sie nicht selbst eine andere Kennzahl ist.
       const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar/i.test(lines[l+1]||'');
-      const v = specOnLine(scope, opt.unit)
-             || (opt.up ? specOnLine(lines[l-1]||'', opt.unit) : '')
-             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit) : '');
+      const geRow = /≥/.test(lines[l]) || /≥/.test(lines[l+1]||'');
+      const v = specOnLine(scope, opt.unit, geRow)
+             || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow) : '')
+             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow) : '');
       if (v!=='' && v!=='k.A.') return v;
     }
     return '';
@@ -854,12 +872,12 @@ function extract(text, linePos){
       }
       const right = lines[l].slice(ai).match(vre);
       if (right) return cleanNum(right[1]);
-      const leftPart = lines[l].slice(0,ai);
+      const leftPart = afterGE(lines[l].slice(0,ai), unit);
       const lefts = leftPart.match(new RegExp(vre.source,'ig'));
       if (lefts) return cleanNum((lefts[lefts.length-1].match(vre)||[])[1]);
       // Wert in der Folge- bzw. Vorzeile (ArchiPHYSIK: "HEB SK=" \n "… 53,1kWh/m²a")
-      const below = (lines[l+1]||'').match(vre); if (below) return cleanNum(below[1]);
-      const above = (lines[l-1]||'').match(vre); if (above) return cleanNum(above[1]);
+      const below = afterGE(lines[l+1]||'', unit).match(vre); if (below) return cleanNum(below[1]);
+      const above = afterGE(lines[l-1]||'', unit).match(vre); if (above) return cleanNum(above[1]);
     }
     return '';
   }
@@ -912,7 +930,10 @@ function extract(text, linePos){
   r.hteb   = byAbbr(/\bHTEB\b(?!\s*[-,]?\s*RH)/i, undefined, {last:true});
   // ECOTECH 2015 / ArchiPHYSIK 16 nennen den EEB "End-/Lieferenergiebedarf"
   // (bzw. "E/LEB") — das notSuffix-Lieferenergie gilt nur dem Erklärungstext.
-  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i})
+  // up: ArchiPHYSIK bricht den EEB um ("kWh/a  61,12" ueber
+  // "Endenergiebedarf  42.443   EEB SK  kWh/m²a"); ohne die Vorzeile faellt
+  // die Suche auf den PEB der Folgezeile durch.
+  r.eeb    = byGerman(/Endenergiebedarf/i, {section:'SK', notSuffix:/Referenz|Lieferenergie/i, up:true})
           || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'SK'})
           || byAbbr(/\bEEB\b(?!.*RK)/i);
   r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i})
@@ -1076,8 +1097,15 @@ function extract(text, linePos){
       // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
       const FGV = /(?<![\d.,])\d+,\d+(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
       const src = FGV.test(lines[l]) ? lines[l] : (lines[l+1]||''); FGV.lastIndex = 0;
-      const all = src.match(FGV);
-      if (!all) continue;
+      // fGEE ist dimensionslos. Eine Zeile, deren Zahlen alle eine Energieeinheit
+      // tragen, ist nicht die fGEE-Zeile, auch wenn sie "fGEE" erwähnt —
+      // ArchiPHYSIK schreibt "erfüllt (alternativ zu f GEE)  92,59kWh/m²a ≥ …".
+      const all = [];
+      for (let m; (m = FGV.exec(src)) !== null; ){
+        if (!/^\s*(?:kWh|kg|W\/|m²|m³)/i.test(src.slice(m.index+m[0].length))) all.push(m[0]);
+      }
+      FGV.lastIndex = 0;
+      if (!all.length) continue;
       // "0,43 entspricht 0,75": Ist VOR der Anforderung -> erster Wert.
       fgeeIn.last = l;                                   // Fundzeile für den RK==SK-Vergleich
       if (/entspricht|zul[.,]?\s*=/i.test(src)) return cleanNum(all[0]);
@@ -1210,7 +1238,17 @@ function extract(text, linePos){
                || reText(text, /G[üu]ltig(?:keitsdatum|keit)?\s*(?:bis)?\s*[: ]*\s?(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i)
                || dateNear(/G[üu]ltig(?:keit)?\s*bis|G[üu]ltigkeitsdatum/i);
   r.gueltig_bis = r.gueltig_bis.replace(/\.\s+/g,'.'); // "1. 1. 2027" -> "1.1.2027"
-  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)|erstellt durch/i, {max:60});
+  // "ErstellerIn Nummer: (keine)" ist die Ersteller-NUMMER, nicht der Name.
+  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)|erstellt durch/i, {max:60});
+  // ArchiPHYSIK setzt das Label ans Zeilenende ("GWR-Zahl  k. A.  ErstellerIn")
+  // und den Namen in die Folgezeile.
+  if (!r.aussteller){
+    for (let l=0;l<lines.length-1;l++){
+      if (!/(?:Ausstellerin|ErstellerIn)\s*$/i.test(lines[l])) continue;
+      const dn = cells(lines[l+1]).join(' ').trim();
+      if (/[A-Za-z]{3}/.test(dn) && !/^(?:ERSTELLT|Unterschrift)/i.test(dn)){ r.aussteller = dn.slice(0,60); break; }
+    }
+  }
   // AX3000: "BM Ing. Kuprian  B&K Realplan Bau GmbH." steht ÜBER der Labelzeile
   // "ErstellerIn   Organisation" -> die Labelzeile selbst liefert nur "Organisation".
   if (/^Organisation$/i.test(r.aussteller)){
