@@ -148,6 +148,12 @@ function loadBaseline(p) {
 		process.exit(1);
 	}
 	console.log(`${pdfs.length} PDF(s) in ${dir}\n`);
+	const orphans = fs
+		.readdirSync(dir)
+		.filter((f) => f.endsWith(".expected.json"))
+		.filter((f) => !fs.existsSync(path.join(dir, f.replace(/\.expected\.json$/, ".pdf"))));
+	for (const f of orphans) console.log(`Fixture ohne PDF (node test/fetch.js?): ${f}`);
+	if (orphans.length) console.log("");
 
 	let totPass = 0;
 	let totFail = 0;

@@ -16,6 +16,7 @@ Komplett offline, kein Server, keine Daten verlassen den Rechner. Voller Umfang 
 ```bash
 python3 build.py                             # src/app.template.html + vendor/*.js -> dist/index.html
 npm install                                  # pdfjs-dist (nur Dev-Harness, NICHT ausgeliefert)
+node test/fetch.js                           # Korpus-PDFs aus _quelle laden (nicht im Repo)
 node test/validate.js test/samples 2>/dev/null         # Assert-Harness, Exit≠0 bei FAIL/MISS
 node test/validate.js test/samples --baseline 2>/dev/null   # PASS-Stand als baseline.json sichern
 node test/dump.js test/samples/<datei>.pdf 2>/dev/null  # layouttreuen pdf.js-Text eines PDFs dumpen
@@ -23,8 +24,11 @@ node test/dump.js test/samples/<datei>.pdf 2>/dev/null  # layouttreuen pdf.js-Te
 
 Kein Lint/Unit-Framework. „Test" = `validate.js`. Pro PDF mit `<name>.expected.json` läuft der
 **Assert-Modus** (PASS/FAIL/MISS gegen handgelesene Soll-Werte, Exit-Code, `Δ vs Baseline`); ohne
-Fixture nur Coverage. Der Referenz-Korpus in `test/samples/` (PDFs + Fixtures) ist **committet** und
-muss grün bleiben (100 %). `2>/dev/null` blendet harmlose pdf.js-Font-Warnungen aus.
+Fixture nur Coverage. Der Referenz-Korpus in `test/samples/` muss grün bleiben (100 %). Die PDFs
+sind fremde Ausweise und liegen **nicht** im Repo (gitignored): committet wird je PDF nur die
+Fixture mit `_quelle` (URL) und `_sha256`; `test/fetch.js` lädt fehlende PDFs und prüft die
+Prüfsumme. Tote Quellen (Stand 2026-10-15: egw, iu, kappl, oesw, vatter) fehlen in der CI und
+lassen sich nur lokal prüfen — `validate.js` listet sie als „Fixture ohne PDF". `2>/dev/null` blendet harmlose pdf.js-Font-Warnungen aus.
 
 ## Architektur
 
@@ -151,14 +155,15 @@ Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 20
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
 bleiben dort bewusst leer. Workflow:
 
-1. PDF nach `test/samples/` legen, `node test/validate.js test/samples` laufen lassen.
+1. PDF nach `test/samples/` legen, Fixture mit `_quelle` (direkte URL) + `_sha256` (`sha256sum`)
+   anlegen, `node test/validate.js test/samples` laufen lassen.
 2. Fehlt/falsch ein Feld → das passende `byLabel`/`metric`/Regex in `extract()` anpassen.
 3. `python3 build.py` → erneut validieren → committen.
 
 ## CI / Deploy
 
 `.github/workflows/deploy-pages.yml` läuft bei jedem Push auf `main`: erst das **Test-Gate**
-(`npm install` + `node test/validate.js test/samples` — Exit ≠ 0 bei FAIL **oder** MISS blockiert
+(`npm install` + `node test/fetch.js` + `node test/validate.js test/samples` — Exit ≠ 0 bei FAIL **oder** MISS blockiert
 das Deploy; `npm ci` geht nicht, weil `package-lock.json` bewusst nicht committet ist), dann Build
 (`python3 build.py`) und Deploy von `dist/` nach GitHub Pages. Trotzdem vor dem Push lokal grün
 halten — ein roter main deployt nicht, bleibt aber rot liegen. `dist/index.html` ist committet,

@@ -1,5 +1,6 @@
 {
   "_quelle": "https://st-andrae.gv.at/fileadmin/sankt_andrae/02-Amtstafel/Kundmachungen/Energieeffizienzrichtlinie_III__EED_III__-_Veroeffentlichungen/Energieausweis_Bestand-FF_St._Andrae.pdf",
+  "_sha256": "d9a2ada67ef57025c1b528d66b894af6dca7ce9275319509ad0436f890e82d23",
   "_ausgabe": "OIB RL6 Ausgabe Mai 2023 (GEQ) — Sonstige konditionierte Gebäude (dritte Kategorie)",
   "_layout": "GEQ 2023 'Sonstige': NUR HWB_Ref SK/RK + KB*, bewusst KEINE EEB/PEB/fGEE",
   "_klasse_quelle": "Deckblatt (Seite 2) druckt die Skala-Buchstaben gestapelt: 'HWB' / 'Ref,SK' / 'F' — einziger Klassenbuchstabe des Dokuments, gehört eindeutig zu HWB Ref,SK = 245,0 kWh/m²a. Deckt sich mit der WG/NWG-Skala (200 < 245 <= 250 -> F), die SKG-Deckblattskala ist also nicht verschoben.",

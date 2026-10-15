@@ -1,5 +1,6 @@
 {
   "_quelle": "https://www.sallingberg.at/wp-content/uploads/2026/06/D04.1_EAW-Bestand-Arzthaus-24-07-29.pdf",
+  "_sha256": "6719018850f64a17afbf728d4fa563f40e32630696fa477b6ce8fec48031e0e4",
   "_ausgabe": "OIB RL6 Ausgabe April 2019 (ECOTECH 3.3) — Nicht-Wohngebäude, schlecht gedämmter Bestand",
   "_hinweis": "Extremwerte real (Stromdirektheizung, U=2,04): HWB 614,9 / fGEE 7,10 sind korrekt, kein Bug",
   "ausgabe": "April 2019",

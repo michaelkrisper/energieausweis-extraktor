@@ -1,5 +1,6 @@
 {
   "_quelle": "https://www.krems.at/fileadmin/Dateien/Downloads/Energieausweise/FF-Haus_Krems-Sued_Energieausweis_GESAMT_2019.pdf",
+  "_sha256": "8ea8de6b497930ebc525937aa7b8921230047f0639039b9c3beffdc75f56c5ef",
   "_ausgabe": "OIB RL6 Ausgabe März 2015 (ECOTECH 3.3) — Nicht-Wohngebäude (Feuerwache)",
   "_layout": "ECOTECH; Energie+Geometrie in Summen-Tabelle auf S.14, Deckblatt-Energiebild ohne Textebene. Klimaparameter/Datum nicht im Text -> nicht erwartet.",
   "ausgabe": "März 2015",

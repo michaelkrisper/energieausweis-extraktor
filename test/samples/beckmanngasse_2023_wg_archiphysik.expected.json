@@ -1,5 +1,6 @@
 {
   "_quelle": "https://fify-dynamo-assets.sos-at-vie-1.exo.io/7bdeca949f78fcc6bcd6b5bca1e49a81.pdf",
+  "_sha256": "b43b38201b3810293405b383ea0a7d17193b074ed58805ef08a4f8ebd6f266f4",
   "_ausgabe": "OIB RL6 Ausgabe Mai 2023 (ArchiPHYSIK 25.0.38) — Wohngebäude mit 10 und mehr Nutzungseinheiten, Bestand (Wohnung Top 27+28)",
   "_layout": "ArchiPHYSIK 25 Deckblatt stellt Werte ÜBER die Labels (Straße/PLZ/Grundstücksnr.), Seite 2 Einheiten angeklebt ('112,0m²', '173,2kWh/m²a'); RK-Block nur 'Ergebnisse' ohne Anforderungsspalte; Klassen aus HWB Ref,SK 195,3 bzw. fGEE 2,87 nach den OIB-Klassengrenzen (E bzw. E); Bauweise gedruckt schwere -> Klasse schwer wie im übrigen Korpus",
   "ausgabe": "Mai 2023",
