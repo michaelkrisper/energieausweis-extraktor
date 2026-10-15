@@ -529,8 +529,9 @@ function extract(text, linePos){
   // Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
   // ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor Kleinbuchstaben kommt in echtem Text nicht
   // vor -> ab 3 Treffern die feste Tabelle zurückmappen (auch ²/³/°/ß betroffen).
-  if ((text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3){
-    const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
+  const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
+  const moji = (text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3;
+  if (moji){
     text = text.replace(/[ƒ‰ˆ¸‹÷ﬂ≤≥∞]/g, c => MOJI[c]);
     // ß wurde zur fl-Ligatur und von pdf.js zu ASCII "fl" normalisiert -> nur
     // wortweise reparierbar (Label-Wörter, die die Extraktion braucht)
@@ -748,7 +749,9 @@ function extract(text, linePos){
   const climHeaders = [];                    // {line, page, cols:[{sec:'RK'|'SK'|'ANF', cx}]}
   if (pos){
     const HDR = /Referenzklima|Standortklima|Anforderung/g;
-    const SUB = /spezifisch|zonenbezogen/g;  // Unterüberschrift präzisiert die Wertspalten
+    // Unterüberschrift präzisiert die Wertspalten ("spezifsch": Tippfehler im
+    // sozialbau-Formular, steht dort wörtlich so im Kopf)
+    const SUB = /spezifi?sch|zonenbezogen/g;
     const tokensAt = (l, re) => {
       const out = [];
       for (const part of pos[l].parts){
@@ -772,7 +775,11 @@ function extract(text, linePos){
       // gelegenen Überschrift. OHNE Unterzeile ist die Spaltenmitte kein
       // verlässlicher Anker (rechtsbündige Header) -> Textlogik behalten.
       if (!onlyTokens(l+1, SUB)) continue;
-      const sub = tokensAt(l+1, SUB).map(tk => {
+      // Die Unterzeile kann auf zwei Textzeilen zerfallen (y-Bucket; sozialbau:
+      // "spezifisch" über "zonenbezogen  spezifsch") -> beide zusammennehmen.
+      const subTk = tokensAt(l+1, SUB);
+      if (onlyTokens(l+2, SUB) && pos[l+2] && pos[l+2].page === pos[l].page) subTk.push(...tokensAt(l+2, SUB));
+      const sub = subTk.map(tk => {
         let best = cols[0];
         for (const c of cols) if (Math.abs(c.cx-tk.cx) < Math.abs(best.cx-tk.cx)) best = c;
         return {sec: best.sec, cx: tk.cx, kind: tk.t};
@@ -900,7 +907,9 @@ function extract(text, linePos){
     for (const p of pos[l].parts){
       if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); }
       const cw = p.s.length ? (p.w || p.s.length*5) / p.s.length : 5;
-      for (let i=0;i<p.s.length;i++){ s += p.s[i]; cx.push(p.x + (i+0.5)*cw); }
+      // Mojibake zeichenweise wie im Text reparieren (längentreu, damit cx stimmt) —
+      // sonst findet die x-Karte "kWh/m≤a" nie als kWh/m²a (proholz, ArchiPHYSIK).
+      for (let i=0;i<p.s.length;i++){ s += moji ? (MOJI[p.s[i]] || p.s[i]) : p.s[i]; cx.push(p.x + (i+0.5)*cw); }
       lastX = p.x + p.s.length*5;
     }
     return (XMAP[l] = {s, cx});
