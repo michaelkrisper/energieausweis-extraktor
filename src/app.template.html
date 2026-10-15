@@ -309,6 +309,8 @@ const COLUMNS = [
   {key:'peb_rk',         label:'PEB RK kWh/m²a',           edit:true},
   {key:'peb_nern',       label:'PEB n.ern. SK kWh/m²a',    edit:true},
   {key:'peb_ern',        label:'PEB ern. SK kWh/m²a',      edit:true},
+  {key:'peb_nern_rk',    label:'PEB n.ern. RK kWh/m²a',    edit:true},
+  {key:'peb_ern_rk',     label:'PEB ern. RK kWh/m²a',      edit:true},
   {key:'peb_heb_nern_rk',label:'PEB HEB(+BelEB),n.ern.,RK kWh/m²a', edit:true},
   {key:'fgee',           label:'fGEE,SK',                  edit:true},
   {key:'fgee_rk',        label:'fGEE,RK',                  edit:true},
@@ -332,7 +334,7 @@ const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','huellflaeche','
   'seehoehe','heizgradtage','norm_aussen','soll_innen','heiztage','solarthermie','photovoltaik','stromspeicher','heizlast',
   'hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','kb','kb_stern_rk','keb','wwwb',
   'heb','hteb','eawz_ww','eawz_rh','eawz_h','eawz_k','hhsb','bsb','befeb','beleb',
-  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
+  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_nern_rk','peb_ern_rk','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
 const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','kb','keb','wwwb','heb','hteb','hhsb','bsb','befeb','beleb',
   'eeb','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','fgee','lek'];
@@ -1164,8 +1166,12 @@ function extract(text, linePos){
   // OIB-2015+-Anforderungsblock im Referenzklima: PEB und CO2eq gibt es dort als
   // eigene RK-Kennzahl ("Primärenergiebedarf   PEB RK   169,1 kWh/m²a",
   // ECOTECH/BuildDesk) — sie vervollständigen den RK-Satz neben HWB/EEB/fGEE RK.
-  // PEB-n.ern./-ern. RK bleiben bewusst ohne Spalte (nur 2 Belege im Korpus).
+  // Dazu dessen PEB-Aufteilung ("PEB-n.ern. RK  116,8" / "PEB-ern. RK  52,2"):
+  // 3 Belege (krems, ktimmo, sallingberg), jeweils n.ern. + ern. = PEB RK.
   r.peb_rk = byAbbrAdjacent(/\bPEB[\s,]*RK\b/i, {});
+  // ohne \b vor PEB: ECOTECH klebt das Label an ("nichtPEB-n.ern. RK").
+  r.peb_nern_rk = byAbbrAdjacent(/PEB[-\s,]*n\.?\s*ern\.?[\s,]*RK\b/i, {});
+  r.peb_ern_rk  = byAbbrAdjacent(/\bPEB[-\s,]*ern\.?[\s,]*RK\b/i, {});
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a')    // OCR: "CO," statt "CO2"
