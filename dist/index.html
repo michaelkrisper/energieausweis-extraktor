@@ -453,6 +453,7 @@ function reText(text, re){ return (text.replace(/[ \t]+/g,' ').match(re) || [])[
 // ist kein Feld-Label — der Kleinbuchstabe+Leerzeichen davor verrät den Fließtext.
 // opt.atStart: Label muss am Zellenanfang stehen ("Straße  Kirchenweg 1" ja,
 // "Feldkirchner Straße 102" mitten im Aussteller-Text nein).
+const NEXT_LABEL = /^(?:Katastralgemeinde|Ausstellungsdatum|G[üu]ltigkeitsdatum|Unterschrift|Grundst[üu]cksn|Seeh[öo]he|KG-N|Einlagezahl|Gesch[äa]ftszahl|GWR-Zahl)/i;
 function byLabel(lines, labelRe, opt){
   opt = opt || {};
   const max = opt.max || 40;
@@ -488,6 +489,10 @@ function byLabel(lines, labelRe, opt){
       if (!val && lines[l+1]) val = cells(lines[l+1])[0] || ''; // Wert in Zeile darunter
       if (/^(laut|gem|nach|gem[äa][ßs])\b/i.test(val) && cs[i+1]) val = cs[i+1];
       if (/^\d{4}$/.test(val) && cs[i+2] && /^[A-ZÄÖÜ]/.test(cs[i+2])) val = val+' '+cs[i+2];
+      // Feld leer gedruckt: die Nachbarzelle ist dann schon das NÄCHSTE Label
+      // (GEQ 2023: "Straße  KatastralgemeindeMargarethen", "ErstellerIn" über
+      // "Ausstellungsdatum  07.03.2025") -> kein Wert.
+      if (NEXT_LABEL.test(val)) continue;
       if (val) return val.slice(0,max).trim();
     }
   }
@@ -1579,7 +1584,7 @@ function extract(text, linePos){
     for (let l=0;l<lines.length-1;l++){
       if (!/(?:Ausstellerin|ErstellerIn)\s*$/i.test(lines[l])) continue;
       const dn = cells(lines[l+1]).join(' ').trim();
-      if (/[A-Za-z]{3}/.test(dn) && !/^(?:ERSTELLT|Unterschrift)/i.test(dn)){ r.aussteller = dn.slice(0,60); break; }
+      if (/[A-Za-z]{3}/.test(dn) && !/^(?:ERSTELLT|Unterschrift)/i.test(dn) && !NEXT_LABEL.test(dn)){ r.aussteller = dn.slice(0,60); break; }
     }
   }
   // AX3000: "BM Ing. Kuprian  B&K Realplan Bau GmbH." steht ÜBER der Labelzeile
