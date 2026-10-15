@@ -393,6 +393,8 @@ const COLUMNS = [
   {key:'peb_rk',         label:'PEB RK kWh/m²a',           edit:true},
   {key:'peb_nern',       label:'PEB n.ern. SK kWh/m²a',    edit:true},
   {key:'peb_ern',        label:'PEB ern. SK kWh/m²a',      edit:true},
+  {key:'peb_nern_rk',    label:'PEB n.ern. RK kWh/m²a',    edit:true},
+  {key:'peb_ern_rk',     label:'PEB ern. RK kWh/m²a',      edit:true},
   {key:'peb_heb_nern_rk',label:'PEB HEB(+BelEB),n.ern.,RK kWh/m²a', edit:true},
   {key:'fgee',           label:'fGEE,SK',                  edit:true},
   {key:'fgee_rk',        label:'fGEE,RK',                  edit:true},
@@ -416,7 +418,7 @@ const NUM_KEYS = new Set(['bgf','bezugsflaeche','bruttovolumen','huellflaeche','
   'seehoehe','heizgradtage','norm_aussen','soll_innen','heiztage','solarthermie','photovoltaik','stromspeicher','heizlast',
   'hwb','hwb_rk','hwb_ref_sk','hwb_ref_rk','kb','kb_stern_rk','keb','wwwb',
   'heb','hteb','eawz_ww','eawz_rh','eawz_h','eawz_k','hhsb','bsb','befeb','beleb',
-  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
+  'eeb','eeb_rk','peb','peb_rk','peb_nern','peb_ern','peb_nern_rk','peb_ern_rk','peb_heb_nern_rk','co2','co2_rk','pve','lek','fgee','fgee_rk']);
 // Kennzahlen für Status-Bewertung
 const KENNZAHLEN = ['hwb','hwb_rk','hwb_ref_sk','kb','keb','wwwb','heb','hteb','hhsb','bsb','befeb','beleb',
   'eeb','peb','peb_nern','peb_ern','peb_heb_nern_rk','co2','pve','fgee','lek'];
@@ -529,8 +531,9 @@ function extract(text, linePos){
   // Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
   // ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor Kleinbuchstaben kommt in echtem Text nicht
   // vor -> ab 3 Treffern die feste Tabelle zurückmappen (auch ²/³/°/ß betroffen).
-  if ((text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3){
-    const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
+  const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
+  const moji = (text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3;
+  if (moji){
     text = text.replace(/[ƒ‰ˆ¸‹÷ﬂ≤≥∞]/g, c => MOJI[c]);
     // ß wurde zur fl-Ligatur und von pdf.js zu ASCII "fl" normalisiert -> nur
     // wortweise reparierbar (Label-Wörter, die die Extraktion braucht)
@@ -748,7 +751,9 @@ function extract(text, linePos){
   const climHeaders = [];                    // {line, page, cols:[{sec:'RK'|'SK'|'ANF', cx}]}
   if (pos){
     const HDR = /Referenzklima|Standortklima|Anforderung/g;
-    const SUB = /spezifisch|zonenbezogen/g;  // Unterüberschrift präzisiert die Wertspalten
+    // Unterüberschrift präzisiert die Wertspalten ("spezifsch": Tippfehler im
+    // sozialbau-Formular, steht dort wörtlich so im Kopf)
+    const SUB = /spezifi?sch|zonenbezogen/g;
     const tokensAt = (l, re) => {
       const out = [];
       for (const part of pos[l].parts){
@@ -772,7 +777,11 @@ function extract(text, linePos){
       // gelegenen Überschrift. OHNE Unterzeile ist die Spaltenmitte kein
       // verlässlicher Anker (rechtsbündige Header) -> Textlogik behalten.
       if (!onlyTokens(l+1, SUB)) continue;
-      const sub = tokensAt(l+1, SUB).map(tk => {
+      // Die Unterzeile kann auf zwei Textzeilen zerfallen (y-Bucket; sozialbau:
+      // "spezifisch" über "zonenbezogen  spezifsch") -> beide zusammennehmen.
+      const subTk = tokensAt(l+1, SUB);
+      if (onlyTokens(l+2, SUB) && pos[l+2] && pos[l+2].page === pos[l].page) subTk.push(...tokensAt(l+2, SUB));
+      const sub = subTk.map(tk => {
         let best = cols[0];
         for (const c of cols) if (Math.abs(c.cx-tk.cx) < Math.abs(best.cx-tk.cx)) best = c;
         return {sec: best.sec, cx: tk.cx, kind: tk.t};
@@ -900,7 +909,9 @@ function extract(text, linePos){
     for (const p of pos[l].parts){
       if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); }
       const cw = p.s.length ? (p.w || p.s.length*5) / p.s.length : 5;
-      for (let i=0;i<p.s.length;i++){ s += p.s[i]; cx.push(p.x + (i+0.5)*cw); }
+      // Mojibake zeichenweise wie im Text reparieren (längentreu, damit cx stimmt) —
+      // sonst findet die x-Karte "kWh/m≤a" nie als kWh/m²a (proholz, ArchiPHYSIK).
+      for (let i=0;i<p.s.length;i++){ s += moji ? (MOJI[p.s[i]] || p.s[i]) : p.s[i]; cx.push(p.x + (i+0.5)*cw); }
       lastX = p.x + p.s.length*5;
     }
     return (XMAP[l] = {s, cx});
@@ -956,8 +967,18 @@ function extract(text, linePos){
     // "- kWh/m²a" = Wert bewusst leer (GEQ) -> nichts aus der Nachbarzeile holen.
     const dash = xAt(ar, new RegExp('-\\s*'+U,'i'));
     if (dash !== null && dash > ax) return '';
+    // erste Einheit RECHTS der Abkürzung (links davon steht die der Grenze:
+    // "erfüllt  kWh/m³a ≥ KB* RK  kWh/m³a", ArchiPHYSIK 17)
     let ux = null;
-    for (const i of rows){ const x = xAt(i, new RegExp('(?<![\\d,.])\\s*'+U,'i')); if (x !== null && x > ax){ ux = x; break; } }
+    for (const i of rows){
+      const m = xmap(i); if (!m) continue;
+      const ure = new RegExp('(?<![\\d,.])\\s*'+U,'ig');
+      for (let g; ux === null && (g = ure.exec(m.s)) !== null; ){
+        const x = m.cx[g.index + (g[0].length >> 1)];
+        if (x !== undefined && x > ax) ux = x;
+      }
+      if (ux !== null) break;
+    }
     if (ux === null) return '';
     // Der nackte Wert muss in der Einheiten-Spalte stehen (Einheit folgt ihm
     // unmittelbar), sonst ist es die Zahl einer anderen Kennzahl.
@@ -1001,6 +1022,64 @@ function extract(text, linePos){
     }
     return keep.length ? keep : vals;
   }
+  // x-Positionen der Kandidaten vals (Strings wie in der Zeile) auf Zeile l.
+  function valsAt(l, vals){
+    const m = xmap(l); if (!m) return [];
+    const out = [];
+    for (const v of new Set(vals)){
+      const re = new RegExp('(?<![\\d.,])'+v.replace(/[.]/g,'\\.')+'(?![\\d,])','g');
+      for (let g; (g = re.exec(m.s)) !== null; ) if (m.cx[g.index] !== undefined) out.push({v, cx: m.cx[g.index]});
+    }
+    return out;
+  }
+  // Spaltenkopf einer Anforderungstabelle über Zeile l: "Ergebnisse | Anforderungen"
+  // (GEQ 2019), "Berechnet | Grenzwert | Anforderung" (klimafonds/Krems). Wie bei
+  // den Klimaspalten zählt nur eine Zeile, die AUSSCHLIESSLICH aus Kopf-Tokens
+  // besteht. Rückgabe: Kopf-Tokens mit x-Mitte und Rolle (ist/grenze) oder null.
+  function istHeader(l){
+    const TOK = /Ergebnis(?:se)?|Berechnet|Ist-?Werte?|Anforderung(?:en)?|Grenzwerte?/g;
+    for (let h = l-1; h >= 0 && l-h <= 25; h--){
+      if (!pos[h] || pos[h].page !== pos[l].page) return null;
+      if (!lines[h].trim() || lines[h].replace(TOK,'').trim() !== '') continue;
+      const m = xmap(h); if (!m) return null;
+      const cols = [];
+      for (let g; (g = TOK.exec(m.s)) !== null; )
+        cols.push({ist: /^(?:Erg|Ber|Ist)/.test(g[0]), cx: m.cx[g.index + (g[0].length >> 1)]});
+      if (cols.some(c => c.ist) && cols.some(c => !c.ist)) return cols;
+    }
+    return null;
+  }
+  // Ist-Wert unter mehreren Kandidaten EINER Zeile, rein aus Position bzw.
+  // Rechnung — ersetzt "erster kWh/m²a-Wert der Zeile". '' = nicht eindeutig,
+  // der Aufrufer behält dann die Textlogik (bzw. arbeitet ohne Positionsdaten).
+  function istOnLine(l, vals, unit){
+    if (!pos || !pos[l] || vals.length < 2) return '';
+    const one = arr => { const u = [...new Set(arr)]; return u.length === 1 ? cleanNum(u[0]) : ''; };
+    // 1) Anforderungs-Subskript ",zul" über/unter einem Wert (GEQ "entspricht")
+    const ist = dropLimits(l, vals);
+    if (ist.length < vals.length && one(ist)) return one(ist);
+    const at = valsAt(l, ist);
+    // 2) Kopfzeile "Ergebnisse | Anforderungen": Wert gehört zur x-nächsten Spalte
+    const hdr = istHeader(l);
+    if (hdr && at.length){
+      const near = c => hdr.reduce((b, h) => Math.abs(h.cx-c.cx) < Math.abs(b.cx-c.cx) ? h : b);
+      const v = one(at.filter(c => near(c).ist).map(c => c.v));
+      if (v) return v;
+    }
+    // 3) Flächenbezug: steht der absolute Wert (kWh/a bzw. kg/a) auf der Zeile, ist
+    // der spezifische Ist-Wert dessen Quotient durch die BGF. Klimaspalten ohne
+    // Kopf im Textlayer (ETU 2011: "HWB 23,7 | 171.752 kWh/a 23,7 | 33,2 erfüllt",
+    // Referenzklima | Standortklima zonal+spez | Anforderung) sind so eindeutig.
+    const bgf = parseFloat(r.bgf);
+    const abs = (unit || '').startsWith('kg') ? 'kg\\/a' : 'kWh\\/a';
+    const qm = lines[l].match(new RegExp('('+NUMRE+')\\s*'+abs+'(?![a-z²³])','i'));
+    if (bgf > 0 && qm){
+      const q = parseFloat(cleanNum(qm[1])) / bgf;
+      const v = one(ist.filter(x => { const n = parseFloat(cleanNum(x)); return Math.abs(n-q) <= Math.max(0.6, n*0.02); }));
+      if (v) return v;
+    }
+    return '';
+  }
 
   // letzter spezifischer kWh/m²a-Wert auf einer Zeile (das ist der spez. Bedarf,
   // nicht die absolute kWh/a-Zahl davor)
@@ -1015,16 +1094,20 @@ function extract(text, linePos){
   // geRow: die Zeile gehört zu einer Anforderungszeile mit "≥". ArchiPHYSIK
   // schreibt die Einheiten dann in die Folgezeile ("erfüllt kWh/m³a≥KB* RK") und
   // lässt die Zahlen nackt stehen ("1,00  0,11") — Reihenfolge Grenze, dann Ist.
-  function specOnLine(line, unit, geRow){
+  // l: Zeilenindex von line (für die Positionslogik, optional).
+  function specOnLine(line, unit, geRow, l){
     unit = unit || 'kWh\\/m²a';
     line = afterGE(line, unit);
-    // erster Wert mit Einheit = der reale Bedarf; spätere Spalten sind
-    // Anforderung/Referenz (klassische Tabellen führen die Anforderung rechts).
-    const m = line.match(new RegExp('('+NUMRE+')\\s*'+unit,'i'));
-    if (m) return cleanNum(m[1]);
-    const sc = shortCommas(line);
-    if (!sc.length) return '';
-    return cleanNum(geRow ? sc[sc.length-1] : sc[0]);
+    const withUnit = (line.match(new RegExp('('+NUMRE+')\\s*'+unit,'ig')) || []).map(x => x.match(new RegExp(NUMRE))[0]);
+    const vals = withUnit.length ? withUnit : shortCommas(line);
+    if (!vals.length) return '';
+    // Mehrere Kandidaten: Position bzw. Flächenbezug entscheidet (istOnLine).
+    if (l !== undefined){ const p = istOnLine(l, vals, unit); if (p) return p; }
+    // Textfallback ohne Positionsdaten: erster Wert mit Einheit = realer Bedarf;
+    // spätere Spalten sind Anforderung/Referenz (klassische Tabellen führen die
+    // Anforderung rechts). "≥"-Zeilen (ArchiPHYSIK) nennen die Grenze zuerst.
+    if (withUnit.length) return cleanNum(withUnit[0]);
+    return cleanNum(geRow ? vals[vals.length-1] : vals[0]);
   }
   // Wert über deutsche Bezeichnung (labelRe) holen; opt.section filtert RK/SK,
   // opt.suffix verlangt zusätzlich ein Index-Suffix (auf Zeile oder Folgezeile).
@@ -1044,7 +1127,14 @@ function extract(text, linePos){
       // Positionslogik vor Textlogik: steht die Abkürzung der Kennzahl auf der
       // Zeile, ist der Ist-Wert der Wert RECHTS davon — links davon steht in
       // Anforderungszeilen die Grenze ("75,69 kWh/m²a | E/LEB,RK | 69,82 kWh/m²a").
-      if (opt.abbr){ const pa = istRight(l, opt.abbr, opt.unit, true); if (pa) return pa; }
+      const geRow = /≥/.test(lines[l]) || /≥/.test(lines[l+1]||'');
+      // Abkürzung nicht auf der Label-Zeile, sondern in der "≥"-Folgezeile
+      // (ArchiPHYSIK: "Außeninduzierter Kühlbedarf  1,00  0,11" über
+      // "erfüllt  kWh/m³a ≥ KB* RK  kWh/m³a") -> Nachbarzeilen zulassen.
+      if (opt.abbr){
+        const own = xAt(l, opt.abbr) !== null || !geRow;
+        const pa = istRight(l, opt.abbr, opt.unit, own); if (pa) return pa;
+      }
       let scope = lines[l];
       // GEQ-Anforderungszeile: "<dt.Label> 49,7 ...erfüllt  HWB 35,9" -> Wert nach
       // der Abkürzung ist der Bedarfswert (links steht die Anforderungsgrenze).
@@ -1062,10 +1152,9 @@ function extract(text, linePos){
       // ArchiPHYSIK stellt den Wert z.T. in die Zeile ÜBER das Label.
       // Folgezeile nur nutzen, wenn sie nicht selbst eine andere Kennzahl ist.
       const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar/i.test(lines[l+1]||'');
-      const geRow = /≥/.test(lines[l]) || /≥/.test(lines[l+1]||'');
-      const v = specOnLine(scope, opt.unit, geRow)
-             || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow) : '')
-             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow) : '');
+      const v = specOnLine(scope, opt.unit, geRow, l)
+             || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow, l-1) : '')
+             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1) : '');
       if (v!=='' && v!=='k.A.') return v;
     }
     return '';
@@ -1124,7 +1213,7 @@ function extract(text, linePos){
       if (pv){ if (!opt.last) return pv; found = pv; continue; }
       if (pv === '') continue;               // Tabelle gilt, Spalte leer -> nicht raten
       if (opt.tableOnly) continue;           // nur unter Klimaspalten-Header zugreifen
-      const v = specOnLine(lines[l], unit) || specOnLine(lines[l+1]||'', unit);
+      const v = specOnLine(lines[l], unit, false, l) || specOnLine(lines[l+1]||'', unit, false, l+1);
       if (v!==''){ if (!opt.last) return v; found = v; }
     }
     return found;
@@ -1161,8 +1250,12 @@ function extract(text, linePos){
   // OIB-2015+-Anforderungsblock im Referenzklima: PEB und CO2eq gibt es dort als
   // eigene RK-Kennzahl ("Primärenergiebedarf   PEB RK   169,1 kWh/m²a",
   // ECOTECH/BuildDesk) — sie vervollständigen den RK-Satz neben HWB/EEB/fGEE RK.
-  // PEB-n.ern./-ern. RK bleiben bewusst ohne Spalte (nur 2 Belege im Korpus).
+  // Dazu dessen PEB-Aufteilung ("PEB-n.ern. RK  116,8" / "PEB-ern. RK  52,2"):
+  // 3 Belege (krems, ktimmo, sallingberg), jeweils n.ern. + ern. = PEB RK.
   r.peb_rk = byAbbrAdjacent(/\bPEB[\s,]*RK\b/i, {});
+  // ohne \b vor PEB: ECOTECH klebt das Label an ("nichtPEB-n.ern. RK").
+  r.peb_nern_rk = byAbbrAdjacent(/PEB[-\s,]*n\.?\s*ern\.?[\s,]*RK\b/i, {});
+  r.peb_ern_rk  = byAbbrAdjacent(/\bPEB[-\s,]*ern\.?[\s,]*RK\b/i, {});
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a')    // OCR: "CO," statt "CO2"
@@ -1193,7 +1286,7 @@ function extract(text, linePos){
   r.kb          = byGerman(/^\s*Kühlbedarf\b(?!\*)/i, {section:'SK'})
                || byAbbrLine(/^\s*KB(?![\w*:.,])/)
                || byAbbrLine(/^\s*KB(?![\w*:.,])/, {section:'SK'}); // GEQ-2011-Tabelle (einheitslos)
-  r.kb_stern_rk = byGerman(/Au[ßs]eninduzierter\s+Kühlbedarf|^\s*Kühlbedarf\*/i, {unit:'kWh\\/m³a'})
+  r.kb_stern_rk = byGerman(/Au[ßs]eninduzierter\s+Kühlbedarf|^\s*Kühlbedarf\*/i, {unit:'kWh\\/m³a', abbr:/KB\s*\*/})
                || byAbbrLine(/^\s*KB\*/, {section:'RK', unit:'kWh\\/m³a'})
                || byAbbrLine(/^\s*KB\*/, {section:'SK', unit:'kWh\\/m³a'});
   r.keb         = byGerman(/^\s*Kühlenergiebedarf\b/i, {section:'SK'})
@@ -1230,7 +1323,7 @@ function extract(text, linePos){
       const v2 = colValue(l+1, 'SK');
       if (v2) return v2;
       if (v===null && v2===null){
-        const t = specOnLine(lines[l]) || specOnLine(lines[l+1]||''); if (t) return t;
+        const t = specOnLine(lines[l], undefined, false, l) || specOnLine(lines[l+1]||'', undefined, false, l+1); if (t) return t;
       }
     }
     return '';
@@ -1339,6 +1432,14 @@ function extract(text, linePos){
       // (ArchiPHYSIK 13: "0,900 | fGEE | 0,817" über zwei Textzeilen verteilt).
       const px = istRight(sl, /f\s*GEE|fGEE/i, '');
       if (px && ist.indexOf(px.replace('.',',')) >= 0) return px;
+      // GEQ stapelt die Abkürzung: "f" auf der Wertzeile, "GEE" x-gleich darunter
+      // ("Gesamtenergieeffizienz-Faktor  0,85  erfüllt  f  0,83" / "GEE").
+      const F = /(?<!\S)f(?!\S)/;
+      const fx = xAt(sl, F), gx = xAt(sl+1, /(?<!\S)GEE\b/);
+      if (fx !== null && gx !== null && Math.abs(fx-gx) < 15){
+        const ps = istRight(sl, F, '', true);
+        if (ps && ist.indexOf(ps.replace('.',',')) >= 0) return ps;
+      }
       // Ohne Positionsdaten bleibt die Textweiche: "0,43 entspricht 0,75" nennt
       // den Ist-Wert zuerst, "0,900  0,817" (Anforderung + Ist) zuletzt.
       if (/entspricht|zul[.,]?\s*=/i.test(src)) return cleanNum(ist[0]);
