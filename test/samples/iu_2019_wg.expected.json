@@ -1,5 +1,6 @@
 {
   "_quelle": "https://i-u.wien/media/2019/09/Energieausweis-Drorygasse-4a.pdf",
+  "_sha256": "e6a3e9791c9627670442713a5b2d768e80f75f954b14a23677703519082d790e",
   "_ausgabe": "OIB RL6 Ausgabe März 2015 (ArchiPHYSIK 13, RÖHRER Bauphysik)",
   "_layout": "ArchiPHYSIK 13, Suffixe (HWBRef,SK / HWBSK / fGEE) z.T. in Folgezeile, RK+SK-Blöcke",
   "_korrektur": "hwb_ref_rk war 29,18 = HWB_Ref,RK,zul (Anforderungsspalte x=320), nicht der Ist-Wert. Die ANFORDERUNGEN-Tabelle auf Seite 2 hat die Spalten Anforderung(x=320) | Abkuerzung(x=386) | Ist(x=469); die fGEE-Zeile derselben Tabelle druckt dort 0,900 (OIB-Grenzwert) neben 0,817 (Ist, im Fixture als fgee_rk). 29,18 ist ausserdem exakt 16*(1+3,0/l_c) mit l_c=3,64 m = die OIB-Anforderung. Ist-Wert HWB_Ref,RK = 24,29 (x=469).",

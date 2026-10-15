@@ -33,6 +33,8 @@ jobs:
       # package-lock.json ist bewusst nicht committet (einzige Dev-Dependency:
       # pdfjs-dist fürs Test-Harness) -> npm install statt npm ci, kein Cache
       - run: npm install
+      # die Korpus-PDFs liegen nicht im Repo, nur ihre URLs (_quelle in den Fixtures)
+      - run: node test/fetch.js
       - name: Engine gegen Referenz-Korpus validieren
         run: node test/validate.js test/samples
 

@@ -5,7 +5,8 @@ __pycache__/
 .DS_Store
 *.xlsx
 # Dev-Test-Harness: nur Abhängigkeiten nicht committen.
-# test/samples/ (Referenz-PDFs + *.expected.json) wird BEWUSST committet:
-# reproduzierbares Regressions-Harness, das überall ohne Download grün laufen muss.
+# Referenz-PDFs sind fremde Ausweise: committet werden nur die Fixtures (*.expected.json mit
+# _quelle-URL + _sha256), die PDFs lädt test/fetch.js nach test/samples/.
+test/samples/*.pdf
 node_modules/
 package-lock.json
