@@ -54,7 +54,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   = Excel-Reihenfolge. Fehlt ein Wert in einer Ausgabe, bleibt die Spalte leer. Hauptspalten
   (`hwb`, `eeb`, `peb`, `co2`, `fgee`) führen den **Standortklima-Wert** (realer Bedarf / Inserat-Zahl);
   RK- und Ref-Varianten in eigenen Spalten (`hwb_rk`, `hwb_ref_sk`, `hwb_ref_rk`, `eeb_rk`, `peb_rk`,
-  `co2_rk`, `fgee_rk`; `peb_rk`/`co2_rk` druckt der OIB-2015+-Anforderungsblock von ECOTECH/BuildDesk).
+  `peb_nern_rk`, `peb_ern_rk`, `co2_rk`, `fgee_rk`; `peb_rk`/`peb_(n)ern_rk`/`co2_rk` druckt der
+  OIB-2015+-Anforderungsblock von ECOTECH/BuildDesk).
   Dazu die vollen OIB-2015+-Kennwertblöcke (`kb`, `kb_stern_rk` [kWh/m³a!], `keb`, `hhsb`, `bsb`,
   `befeb`, `beleb`, `peb_nern`, `peb_ern`, `peb_heb_nern_rk` [OIB 2023: PEB n.ern. für RH+WW(+Bel), RK],
   `pve`, `eawz_ww/rh/h/k`) und Gebäudedaten des Deckblatts (`huellflaeche`, `soll_innen`, `bauweise`,
@@ -68,7 +69,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   x-nächsten Unterspalte; ein kWh/a-Wert wirkt als Paar-Anker (der spez. Wert direkt rechts erbt dessen
   Spalte — AX3000 druckt „zonal spez" je Klima). Achtung: die ERSTE spezifisch-Spalte ist dort das
   REFERENZKLIMA — der alte „erster kWh/m²a-Wert der Zeile"-Ansatz wäre falsch. Ohne Unterzeile
-  (rechtsbündige Header, z.B. sozialbau) bleibt bewusst die Textlogik aktiv. Header nur, wenn die Zeile
+  (rechtsbündige Header) bleibt bewusst die Textlogik aktiv. Die Unterzeile darf auf zwei Textzeilen
+  zerfallen und „spezifsch" (Tippfehler im sozialbau-Formular) heißen. Header nur, wenn die Zeile
   AUSSCHLIESSLICH aus Header-Tokens besteht (Prosa zählt nicht). `numAboveLabel()` holt x-ausgerichtete
   Werte aus der Zeile ÜBER dem Label (AX3000 stapelt `0,29  -16,0` über „mittlerer U-Wert … Norm-Außen…").
   `byLabel` hat einen Fließtext-Guard (kleingeschriebenes Wort vor dem Label = Satz, kein Feld).
@@ -77,7 +79,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die
   Grenze. `istRight()` löst das über eine zeichengenaue x-Karte der Zeile (`xmap`, gleiche Rekonstruktion
   wie `pdfToText`, damit auch Treffer über mehrere pdf.js-Items wie „HWB " + „Ref,SK" verortbar sind) und
-  bezieht die direkten Nachbarzeilen derselben Seite mit ein — der y-Bucket zerlegt eine Tabellenzeile oft
+  bezieht die direkten Nachbarzeilen derselben Seite mit ein (die x-Karte repariert Mac-Mojibake
+  zeichenweise mit, sonst wäre „kWh/m≤a" nie als Einheit lesbar) — der y-Bucket zerlegt eine Tabellenzeile oft
   in zwei Textzeilen (Wert oben, Abkürzung darunter). Die Zeile der Abkürzung gewinnt immer zuerst;
   Nachbarzeilen gehören sonst zur NÄCHSTEN Kennzahl (`ownRow`-Flag schaltet sie ganz ab). `dropLimits()`
   wirft Werte raus, über/unter denen das Subskript `…,zul` steht (GEQ: „f GEE,RK = 0,43 entspricht
@@ -107,10 +110,16 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     Klima-Block (`ANFORDERUNGEN/Referenzklima` → RK, `WÄRME- UND ENERGIEBEDARF/Standortklima` → SK).
     `byGerman(labelRe, {section, unit, …})` ankert an der deutschen Bezeichnung; `byAbbrAdjacent(abbrRe,
     {section})` nimmt den einheitsbehafteten Wert direkt neben der Abkürzung (rechts bei GEQ, links bei
-    ArchiPHYSIK). `specOnLine()` liefert den ersten kWh/m²a-Wert einer Zeile (= realer Bedarf, nicht die
-    Anforderungsgrenze rechts). `fgeeIn(section)` nimmt bei „0,900 0,817" (Limit+Ist) den letzten Wert,
-    bei „0,43 entspricht 0,75" (Ist+Limit, ETU/ArchiPHYSIK) den ersten; Werte der Label-Zeile schlagen
-    die Folgezeile (GEQ 2023 stellt darunter „PVE =0,0").
+    ArchiPHYSIK). `specOnLine()` wählt bei mehreren Werten einer Zeile über `istOnLine()`: (1) `…,zul`-
+    Subskript = Anforderung (`dropLimits`), (2) Kopfzeile „Ergebnisse | Anforderungen" bzw. „Berechnet |
+    Grenzwert | Anforderung" → x-nächste Ist-Spalte (`istHeader`), (3) Flächenbezug: steht ein kWh/a-
+    (kg/a-)Wert auf der Zeile, ist der Ist-Wert dessen Quotient durch die BGF (ETU 2011 ohne Spaltenkopf
+    im Textlayer). Erst wenn nichts eindeutig ist (oder ohne `linePos`), greift die Textweiche „erster
+    Wert mit Einheit" bzw. bei „≥" der letzte. `fgeeIn(section)` löst über `dropLimits`/`istRight`
+    (auch gestapelt „f" / „GEE") auf; die Textweiche (bei „entspricht" erster, sonst letzter Wert)
+    bleibt nur Fallback. Einzige verbliebene Ordinalentscheidung im Korpus trotz Positionsdaten:
+    ETU-2011-fGEE-Zeile „=  0,71  0,74" (vatter) — kein Kopf, keine Abkürzung, keine Bezugsgröße.
+    Werte der Label-Zeile schlagen die Folgezeile (GEQ 2023 stellt darunter „PVE =0,0").
     `byAbbrLine(abbrRe)` = einheitsstrikt und NUR auf der Abkürzungszeile selbst — für Vorarlberg-
     Stapellayouts, wo Nachbarzeilen zu anderen Kennzahlen gehören (kein Zeilenübergriff). Achtung:
     `sec[]` schaltet nur auf **Überschriftszeilen** um — Fließtext (Satzpunkt, „…", kleingeschriebene
