@@ -143,9 +143,9 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 ## Neues Aussteller-Format ergänzen
 
-Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
+Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 für WG und NWG und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
 e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (auch Mac-Mojibake,
-Version 16), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
+Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
 Werte) — Baujahre 2010–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
 Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
