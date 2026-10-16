@@ -34,6 +34,14 @@ node test/validate.js test/samples --baseline   # aktuellen Stand als test/basel
 node test/validate.js test/samples              # nächster Lauf zeigt "Δ vs Baseline" je PDF
 ```
 
+Robustheit gegen Druckvarianten (metamorpher Jitter-Test, läuft auch in der CI):
+
+```bash
+node test/validate.js test/samples --jitter      # je PDF 3 zusätzliche Läufe mit versetzter Seite
+node test/validate.js test/samples --jitter=5    # (±0,5–1 in x/y), Item-x-Rauschen ±0,3 und gemischter
+                                                 # Item-Reihenfolge; jedes Feld muss gleich bleiben
+```
+
 Einzelnes PDF debuggen (layouttreuer pdf.js-Text, 1:1 wie die Engine ihn sieht):
 
 ```bash
