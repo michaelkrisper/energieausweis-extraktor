@@ -1876,6 +1876,9 @@ function extract(text, linePos){
     return null;
   }
   const dbk = deckblattKlassen() || {};
+  // gedruckte Klasse außerhalb des Deckblatts (eawz-Inserat "249,16 (F)") für die
+  // Plausibilitätsprüfung merken, bevor der Rechen-Fallback die Lücke füllt
+  const klDruck = {hwb: r.hwb_klasse, fgee: r.fgee_klasse};
   // Buchstabe aus dem Dokument schlägt den Rechen-Fallback.
   r.hwb_klasse  = r.hwb_klasse  || dbk.hwb  || klasse(r.hwb_ref_sk || r.hwb, HWB_GRENZEN);
   r.fgee_klasse = r.fgee_klasse || dbk.fgee || klasse(r.fgee, FGEE_GRENZEN);
@@ -2012,6 +2015,71 @@ function extract(text, linePos){
       pv = out;
     }
     if (pv) r.aussteller = pv.slice(0, 80);
+  }
+  // -- Plausibilität: Widersprüche nur MARKIEREN (r.pruefen -> Status "PRÜFEN · …"),
+  // Werte nie überschreiben. Jede Regel ist eine normative bzw. rechnerische
+  // Beziehung, die in allen korrekt gelesenen Korpus-Ausweisen exakt hält.
+  {
+    const P = [];
+    const num = k => { const s = String(r[k] || ''); if (!s) return null;
+      const n = parseFloat(s.indexOf(',') >= 0 ? cleanNum(s) : s); return isFinite(n) ? n : null; };
+    const fmt = x => String(+x.toFixed(2)).replace('.', ',');
+    // (1) Wertebereiche: außerhalb liegt ein Lese-/Kommafehler vor
+    const BEREICH = {hwb:[0,1000], hwb_rk:[0,1000], hwb_ref_sk:[0,1000], hwb_ref_rk:[0,1000], wwwb:[0,200],
+      heb:[0,2500], eeb:[0,2500], eeb_rk:[0,2500], peb:[0,4000], peb_rk:[0,4000], peb_nern:[0,4000], peb_ern:[0,4000],
+      co2:[0,800], co2_rk:[0,800], fgee:[0.05,15], fgee_rk:[0.05,15], eawz_ww:[0,10], eawz_rh:[0,10], eawz_h:[0,10],
+      eawz_k:[0,10], lek:[1,400], hhsb:[0,200], bsb:[0,300], beleb:[0,500], kb:[0,500], keb:[0,500]};
+    for (const k in BEREICH){ const v = num(k); if (v !== null && (v < BEREICH[k][0] || v > BEREICH[k][1])) P.push(k+' '+fmt(v)+' außerhalb'); }
+    // (2) Geometrie: BF = 0,8·BGF (OIB), A/V = A/V_B, lc = V_B/A = 1/(A/V)
+    const bgf = num('bgf'), bf = num('bezugsflaeche'), A = num('huellflaeche'), V = num('bruttovolumen'),
+          av = num('kompaktheit'), lc = num('char_laenge');
+    if (bgf && bf && Math.abs(bf/bgf - 0.8) > 0.05) P.push('BF/BGF '+fmt(bf/bgf)+' ≠ 0,8');
+    if (A && V && av && Math.abs(A/V - av) > 0.006 + 0.01*av) P.push('A/V '+fmt(av)+' ≠ A/V_B '+fmt(A/V));
+    if (A && V && lc && Math.abs(V/A - lc) > 0.006 + 0.01*lc) P.push('lc '+fmt(lc)+' ≠ V_B/A '+fmt(V/A));
+    else if (!(A && V) && av && lc && Math.abs(av*lc - 1) > 0.006/av + 0.006/lc + 0.005) P.push('lc·A/V '+fmt(av*lc)+' ≠ 1');
+    // (3) PEB = PEB n.ern. + PEB ern. (je SK und RK; Rundung der drei Werte)
+    for (const [t, n, e] of [['peb','peb_nern','peb_ern'], ['peb_rk','peb_nern_rk','peb_ern_rk']]){
+      const a = num(t), b = num(n), c = num(e);
+      if (a !== null && b !== null && c !== null && Math.abs(a - b - c) > Math.max(0.25, 0.005*a)) P.push(t+' '+fmt(a)+' ≠ '+fmt(b)+' + '+fmt(c));
+    }
+    // (4) Standort- vs. Referenzklima derselben Kennzahl: Klimaunterschied
+    // allein verschiebt im Korpus höchstens um Faktor 1,9 (HWB) bzw. 1,15 (fGEE)
+    for (const [s, k, lo, hi] of [['hwb','hwb_rk',0.4,2.5], ['hwb_ref_sk','hwb_ref_rk',0.4,2.5], ['eeb','eeb_rk',0.4,2.5], ['fgee','fgee_rk',0.6,1.6]]){
+      const a = num(s), b = num(k);
+      if (a && b && (a/b < lo || a/b > hi)) P.push(s+'/'+k+' '+fmt(a/b));
+    }
+    // (5) gedruckte Klasse (eawz-Inserat) ↔ Wert; Deckblatt-Buchstaben prüft der Kreuzcheck oben
+    const kh = bandKonflikt(r.hwb_ref_sk || r.hwb, klDruck.hwb !== dbk.hwb ? klDruck.hwb : '', HWB_GRENZEN);
+    const kf = bandKonflikt(r.fgee, klDruck.fgee !== dbk.fgee ? klDruck.fgee : '', FGEE_GRENZEN);
+    if (kh) P.push('HWB-Klasse '+kh); if (kf) P.push('fGEE-Klasse '+kf);
+    // (6) Datum: gültiger Kalendertag, Gültigkeit nach Ausstellung, höchstens 10 Jahre (EAVG)
+    const dt = s => { const m = String(s || '').match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/); if (!m) return null;
+      const y = m[3].length === 2 ? 2000 + +m[3] : +m[3], d = new Date(Date.UTC(y, m[2]-1, +m[1]));
+      return d.getUTCDate() === +m[1] && d.getUTCMonth() === m[2]-1 ? d : NaN; };
+    const da = dt(r.ausstelldatum), dg = dt(r.gueltig_bis);
+    if (Number.isNaN(da)) P.push('Ausstelldatum ungültig'); if (Number.isNaN(dg)) P.push('Gültigkeitsdatum ungültig');
+    if (da && dg && (dg <= da || dg - da > (10*365.25 + 3) * 864e5)) P.push('Gültigkeit '+r.ausstelldatum+' → '+r.gueltig_bis);
+    // (7) spezifischer Wert × BGF = Jahreswert: steht auf der Fundzeile des Werts
+    // genau EIN kWh/a- (kg/a-)Betrag, muss er zur BGF passen (sonst falscher Wert
+    // oder falsche BGF). Nur, wenn KEINE Fundzeile passt.
+    if (bgf){
+      const QK = {hwb:'kWh', hwb_ref_sk:'kWh', wwwb:'kWh', heb:'kWh', eeb:'kWh', peb:'kWh', peb_nern:'kWh', peb_ern:'kWh', hhsb:'kWh', bsb:'kWh', beleb:'kWh', kb:'kWh', keb:'kWh', co2:'kg'};
+      for (const k in QK){
+        const v = num(k); if (v === null || v < 2) continue;
+        const vs = String(r[k]).replace('.', ',');
+        const vre = new RegExp('(?<![\\d.,])'+vs.replace(/,/g, ',')+'(?![\\d])');
+        const qre = new RegExp('('+NUMRE+')\\s*'+QK[k]+'\\/a(?![a-z²³])', 'ig');
+        let seen = 0, fit = 0;
+        for (const ln of lines){
+          if (!vre.test(ln)) continue;
+          const qs = ln.match(qre); if (!qs || qs.length !== 1) continue;
+          const q = parseFloat(cleanNum(qs[0].match(new RegExp(NUMRE))[0]));
+          seen++; if (Math.abs(q/bgf - v) <= Math.max(0.6, 0.03*v)) fit++;
+        }
+        if (seen && !fit) P.push(k+' '+fmt(v)+' ≠ Q/BGF');
+      }
+    }
+    if (P.length) r.pruefen = (r.pruefen ? r.pruefen + '; ' : '') + 'Plausibilität: ' + P.join(', ');
   }
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }

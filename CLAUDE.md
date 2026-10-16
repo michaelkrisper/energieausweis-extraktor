@@ -123,6 +123,14 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   gedruckte Buchstabe (Toleranz ±0,5 % gegen Rundung an der Bandgrenze), setzt `extract()`
   `r.pruefen` und `runScan` daraus den Status `PRÜFEN · Deckblatt ≠ Tabelle`. Werte werden NIE
   überschrieben.
+- **Plausibilitätsprüfung (Ende von `extract()`):** hängt Widersprüche an `r.pruefen` an
+  (`PRÜFEN · Plausibilität: …`), überschreibt nie. Regeln: Wertebereiche je Kennzahl (Komma-/Lesefehler),
+  BF = 0,8·BGF, A/V = A/V_B, lc = V_B/A (bzw. lc·A/V = 1), PEB = PEB n.ern. + PEB ern. (SK und RK),
+  SK/RK-Verhältnis derselben Kennzahl (HWB/EEB 0,4–2,5, fGEE 0,6–1,6), gedruckte Inserat-Klasse ↔ Wert,
+  Datum (Kalendertag, Gültigkeit nach Ausstellung, ≤ 10 Jahre), spez. Wert × BGF = Jahreswert, wenn auf
+  der Fundzeile genau ein kWh/a- bzw. kg/a-Betrag steht. Stand: 0 Fehlalarme auf allen 63 Korpus-PDFs;
+  jede neue Regel muss das halten (Ausnahme: das PDF selbst ist widersprüchlich — dann im Fixture-`_layout`
+  dokumentieren).
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
