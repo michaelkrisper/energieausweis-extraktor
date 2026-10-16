@@ -4,6 +4,11 @@
  * Nur Entwicklungshilfe zum Tunen — nicht Teil des ausgelieferten Tools.
  */
 const fs = require("node:fs");
+const path = require("node:path");
+// Zeilenbildung (groupLines) aus dem Engine-Block des Templates — wie validate.js
+const tpl = fs.readFileSync(path.join(__dirname, "..", "src", "app.template.html"), "utf8");
+// eslint-disable-next-line no-eval
+eval(tpl.slice(tpl.indexOf("const NUM_KEYS"), tpl.indexOf("// ---- State")));
 // pdf.js 6 ist ESM -> dynamisch importieren (wie validate.js)
 let pdfjsLib;
 async function initPdfjs() {
@@ -23,16 +28,13 @@ async function pdfToText(buf) {
 	let text = "";
 	for (let p = 1; p <= Math.min(doc.numPages, 14); p++) {
 		const tc = await (await doc.getPage(p)).getTextContent();
-		const lm = new Map();
+		const items = [];
 		for (const it of tc.items) {
 			if (!it.str || !it.transform) continue;
-			const k = Math.round(it.transform[5] / 2) * 2;
-			if (!lm.has(k)) lm.set(k, []);
-			lm.get(k).push({ x: it.transform[4], s: it.str });
+			items.push({ x: it.transform[4], y: it.transform[5], s: it.str });
 		}
 		text += `===== Seite ${p} =====\n`;
-		for (const y of [...lm.keys()].sort((a, b) => b - a)) {
-			const parts = lm.get(y).sort((a, b) => a.x - b.x);
+		for (const parts of groupLines(items)) {
 			let line = "",
 				lastX = null;
 			for (const pt of parts) {

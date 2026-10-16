@@ -41,15 +41,12 @@ async function pdfToText(buf, tweak) {
 	const linePos = [];
 	for (let p = 1; p <= Math.min(pages, 14); p++) {
 		const tc = await (await doc.getPage(p)).getTextContent();
-		const lm = new Map();
+		const items = [];
 		for (const it of tweak ? tweak(tc.items, p) : tc.items) {
 			if (!it.str || !it.transform) continue;
-			const k = Math.round(it.transform[5] / 2) * 2;
-			if (!lm.has(k)) lm.set(k, []);
-			lm.get(k).push({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: it.str });
+			items.push({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: it.str });
 		}
-		for (const y of [...lm.keys()].sort((a, b) => b - a)) {
-			const parts = lm.get(y).sort((a, b) => a.x - b.x);
+		for (const parts of groupLines(items)) {
 			let line = "",
 				lastX = null;
 			for (const pt of parts) {
@@ -123,11 +120,16 @@ function classify(expected, got) {
 
 // ---- Jitter (metamorpher Robustheitstest) ---------------------------------
 // --jitter[=N]: jedes PDF zusätzlich N-mal (Default 3) mit deterministisch
-// verschobenen pdf.js-Items lesen (Seed = Lauf + Dateiname): x ±JX, y ±JY je Item,
-// dazu zufällige Nachbartausche in der Item-Reihenfolge. Das Ergebnis muss Feld
-// für Feld dem unverschobenen Lauf gleichen — sonst hängt eine Regel an einem
-// brüchigen Schwellwert (y-Bucket, Spaltenlücke, Fensterbreite). Der Hook sitzt
-// in pdfToText (tweak), die Zeilenrekonstruktion selbst bleibt 1:1 wie im Template.
+// verschobenen pdf.js-Items lesen (Seed = Lauf + Dateiname). Modell (JMODE=page):
+// ganze Seite um ±0,5…1 Einheit in x und y versetzt (anderer Druckertreiber/
+// Seitenrand), je Item x-Rauschen ±JNX (0,3), zufällige Nachbartausche in der
+// Item-Reihenfolge. Das Ergebnis muss Feld für Feld dem unverschobenen Lauf
+// gleichen — sonst hängt eine Regel an einem brüchigen Schwellwert (Zeilenraster,
+// Spaltenlücke, Fensterbreite). Der Hook sitzt in pdfToText (tweak), die Zeilen-
+// rekonstruktion selbst bleibt 1:1 wie im Template. y-Rauschen je Item (JNY)
+// ist absichtlich aus: JEDE Zeilentoleranz hat Grundlinienabstände knapp daneben
+// (JNY=0,05: 1, JNY=0,15: 19 von 189 Läufen abweichend) — das misst die Kante
+// von LINE_TOL, nicht eine Regel. JMODE=item: unabhängiges Rauschen ±JX/±JY je Item.
 const JX = Number(process.env.JX || 1);
 const JY = Number(process.env.JY || 1);
 function mulberry32(a) {
@@ -144,6 +146,8 @@ function hashStr(s) {
 	return h >>> 0;
 }
 const JMODE = process.env.JMODE || "page";
+const JNX = Number(process.env.JNX || 0.3);
+const JNY = Number(process.env.JNY || 0);
 function jitterTweak(seed, name) {
 	const rnd = mulberry32(hashStr(name) ^ Math.imul(seed, 0x9e3779b1));
 	const amp = (a) => (rnd() < 0.5 ? -1 : 1) * a * (0.5 + 0.5 * rnd()); // ±0,5a…a
@@ -152,8 +156,13 @@ function jitterTweak(seed, name) {
 		const out = items.map((it) => {
 			if (!it.transform) return it;
 			const t = it.transform.slice();
-			if (JMODE === "page") { t[4] += px; t[5] += py; }
-			else { t[4] += (rnd() * 2 - 1) * JX; t[5] += (rnd() * 2 - 1) * JY; }
+			if (JMODE === "page") {
+				t[4] += px + (rnd() * 2 - 1) * JNX;
+				t[5] += py + (rnd() * 2 - 1) * JNY;
+			} else {
+				t[4] += (rnd() * 2 - 1) * JX;
+				t[5] += (rnd() * 2 - 1) * JY;
+			}
 			return { ...it, transform: t };
 		});
 		for (let i = out.length - 1; i > 0; i--)
@@ -266,7 +275,7 @@ function loadBaseline(p) {
 
 	if (jitterRuns)
 		console.log(
-			`\nJITTER  ${jitterRuns} Läufe je PDF (x ±${JX}, y ±${JY}): ` +
+			`\nJITTER  ${jitterRuns} Läufe je PDF (${JMODE === "page" ? `Seitenversatz ±${JX}/±${JY}, Item-x ±${JNX}, y ±${JNY}` : `Item x ±${JX}, y ±${JY}`}): ` +
 				(jitterDiffs ? `${jitterDiffs} Läufe mit abweichendem Ergebnis` : "alle Ergebnisse stabil"),
 		);
 	if (!anyAssert) process.exit(jitterDiffs ? 1 : 0); // reiner Coverage-Lauf, kein Soll/Ist

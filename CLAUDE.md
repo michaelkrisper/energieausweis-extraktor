@@ -19,6 +19,7 @@ npm install                                  # pdfjs-dist (nur Dev-Harness, NICH
 node test/fetch.js                           # Korpus-PDFs aus _quelle laden (nicht im Repo)
 node test/validate.js test/samples 2>/dev/null         # Assert-Harness, Exit≠0 bei FAIL/MISS
 node test/validate.js test/samples --baseline 2>/dev/null   # PASS-Stand als baseline.json sichern
+node test/validate.js test/samples --jitter 2>/dev/null     # + metamorpher Jitter-Test (CI-Gate, ~1 min)
 node test/dump.js test/samples/<datei>.pdf 2>/dev/null  # layouttreuen pdf.js-Text eines PDFs dumpen
 ```
 
@@ -41,13 +42,28 @@ per dynamischem `import()` (`pdfjsReady`-Promise, vor erstem `getDocument` await
 `GlobalWorkerOptions.workerSrc`. Quelle ist immer das Template; nach jeder Änderung `python3 build.py`.
 Die Libs liegen committet in `vendor/`, damit der Build offline reproduzierbar ist.
 
+**Zeilenbildung (`groupLines`, im Engine-Block, von Template, validate.js und dump.js gemeinsam
+genutzt):** nach y absteigend; ein Item gehört zur laufenden Zeile, solange es höchstens
+`LINE_TOL` = 1,25 unter deren oberstem Item liegt. Verschiebungsinvariant — das frühere feste Raster
+`Math.round(y/2)*2` trennte Items 0,2 auseinander, wenn eine Rastergrenze dazwischen lag, und
+gruppierte bei um 1 Einheit versetzter Seite anders (Jitter-Test: 89 von 189 Läufen abweichend).
+1,25 liegt in einer dünnen Stelle der Grundlinienabstände des Korpus: Label/Wert-Versatz bis 1,13
+(ArchiPHYSIK 1,00, ECOTECH 2011 1,02–1,13) wird eine Zeile, Sub-/Hochstellungen ab ~1,3 bleiben
+eigene Zeilen. Wer `LINE_TOL` ändert, muss Korpus UND `--jitter` grün halten.
+
+**Jitter-Test (`--jitter[=N]`):** liest jedes PDF zusätzlich N-mal (Default 3) mit deterministisch
+verschobenen Items (Seitenversatz ±0,5–1 in x/y, Item-x-Rauschen ±0,3, Nachbartausche in der
+Item-Reihenfolge; Hook `tweak` in `pdfToText`) und verlangt Feld für Feld dasselbe Ergebnis — sonst
+Exit 1. Läuft in der CI. Per-Item-y-Rauschen (`JNY`) misst nur die Kante von `LINE_TOL` und ist aus.
+
 **Eine Engine, zwei Aufrufer — kein Drift:** Die Extraktionslogik lebt nur in `src/app.template.html`.
 `test/validate.js` dupliziert sie NICHT, sondern `eval()`t den Engine-Block direkt aus dem Template
 (Slice `const NUM_KEYS` … `// ---- State`). Ändert man die Engine, ändern sich Browser **und** Test
-gemeinsam. Die `pdfToText`-Zeilenrekonstruktion ist in beiden bewusst 1:1 identisch gehalten.
+gemeinsam. Die `pdfToText`-Zeilenrekonstruktion ist in beiden bewusst 1:1 identisch gehalten (die Zeilenbildung
+selbst steckt in `groupLines` im Engine-Block).
 
 **Pipeline:** PDF → `pdfToText` rekonstruiert layouttreuen Text aus den 2D-Textpositionen von pdf.js
-(Items nach y-Position zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
+(Items per `groupLines()` zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
 und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,y,w,s}]}` mit den ECHTEN
 pdf.js-Positionen. → `extract(text, linePos)` füllt pro Feld einen Wert (ohne `linePos` fallen alle
 Positions-Helfer auf reine Textlogik zurück). → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
@@ -100,7 +116,8 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die
   Grenze. `istRight()` löst das über eine zeichengenaue x-Karte der Zeile (`xmap`, gleiche Rekonstruktion
   wie `pdfToText`, damit auch Treffer über mehrere pdf.js-Items wie „HWB " + „Ref,SK" verortbar sind) und
-  bezieht die direkten Nachbarzeilen derselben Seite mit ein (die x-Karte repariert Mojibake
+  bezieht die direkten Nachbarzeilen derselben Seite mit ein — mit Baseline-y nur, soweit sie zur selben
+  TABELLENZEILE gehören (±6 um die Abkürzung; sonst lieferte ArchiPHYSIK 13 den Wert der Folgezeile) (die x-Karte repariert Mojibake
   zeichenweise mit, sonst wäre „kWh/m≤a" nie als Einheit lesbar) — der y-Bucket zerlegt eine Tabellenzeile oft
   in zwei Textzeilen (Wert oben, Abkürzung darunter). Die Zeile der Abkürzung gewinnt immer zuerst;
   Nachbarzeilen gehören sonst zur NÄCHSTEN Kennzahl (`ownRow`-Flag schaltet sie ganz ab). `dropLimits()`
@@ -202,7 +219,7 @@ bleiben dort bewusst leer. Workflow:
 ## CI / Deploy
 
 `.github/workflows/deploy-pages.yml` läuft bei jedem Push auf `main`: erst das **Test-Gate**
-(`npm install` + `node test/fetch.js` + `node test/validate.js test/samples` — Exit ≠ 0 bei FAIL **oder** MISS blockiert
+(`npm install` + `node test/fetch.js` + `node test/validate.js test/samples --jitter` — Exit ≠ 0 bei FAIL, MISS **oder** Jitter-Abweichung blockiert
 das Deploy; `npm ci` geht nicht, weil `package-lock.json` bewusst nicht committet ist), dann Build
 (`python3 build.py`) und Deploy von `dist/` nach GitHub Pages. Trotzdem vor dem Push lokal grün
 halten — ein roter main deployt nicht, bleibt aber rot liegen. `dist/index.html` ist committet,
