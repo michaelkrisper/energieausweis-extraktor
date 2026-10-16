@@ -168,6 +168,7 @@ bleiben dort bewusst leer. Workflow:
   einem eindeutigen OIB-Nutzungsprofil ab (AX3000 druckt den Titel nur als Grafik).
 - `nutzungsprofil` = Detailangabe wie gedruckt (Bürogebäude, Einfamilienhaus, „Wohngebäude mit drei bis
   neun Nutzungseinheiten", Plural „Mehrfamilienhäuser" …), mehrzeilige Werte vollständig.
+- Datumsfelder als `TT.MM.JJJJ`; Monatsnamen („30.September 2025", AX3000) werden numerisch erwartet.
 - Feld leer gedruckt („---", „-", „k.A.") → `""` asserten; Key weglassen = nicht geprüft.
 
 ## CI / Deploy

@@ -545,15 +545,23 @@ function extract(text, linePos){
     text = text.replace(/Strafle/g,'Straße').replace(/Auflen/g,'Außen').replace(/Grofl/g,'Groß');
   }
   text = text.replace(/[−–‐‑]/g,'-'); // Unicode-Minus/Bindestriche -> ASCII '-'
+  // Foxit Reader PDF Printer (laendleimmo) liefert U+0000 statt Leerzeichen
+  // ("Nr.\u000088340-1") -> \s und die Zellen-Logik griffen dort nie.
+  if (text.indexOf('\u0000') >= 0){
+    text = text.replace(/\u0000/g,' ');
+    if (linePos) linePos = linePos.map(lp => ({page: lp.page, parts: lp.parts.map(p => Object.assign({}, p, {s: p.s.replace(/\u0000/g,' ')}))}));
+  }
   const lines = text.replace(/\r/g,'').split('\n');
   // Positionsdaten (Seite + x/Breite je pdf.js-Item) laufen 1:1 parallel zu lines
   // mit; ohne sie (oder bei Versatz) fallen alle Positions-Helfer auf die reine
   // Textlogik zurück — extract(text) bleibt daher weiter voll funktionsfähig.
   const pos = (linePos && lines.length - linePos.length <= 1) ? linePos : null;
   const r = {};
-  r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?(?:Nr\.?|Zahl)|EA[- ]?Nr\.?|Ausweis[- ]?Nr\.?|EA[- ]?Zahl|Protokoll[- ]?Nr\.?/i, {max:20})
-                 || reText(text, /(?:Energieausweis|Ausweis|Protokoll)[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i)
-                 || reText(text, /^Nr\.\s*(\d{3,}[-\/]\d+)/im);   // eawz: "Nr. 69373-1"
+  r.ea_nummer    = byLabel(lines, /Energieausweis[- ]?(?:Nr\.?|Zahl)|EAW?[- ]?Nr\.?|Ausweis[- ]?Nr\.?|EA[- ]?Zahl|Protokoll[- ]?Nr\.?/i, {max:20})
+                 || reText(text, /^Nr\.\s*(\d{3,}[-\/]\d+)/im)    // eawz: "Nr. 69373-1"
+                 // Prosa-Guard: "… sowie Energieausweis Nr. 4349-2 von Herrn …" zitiert
+                 // einen VORGÄNGER-Ausweis (laendleimmo), ist nicht die eigene Nummer.
+                 || reText(text, /(?<![a-zäöüß]{3}[,.]?\s)(?:Energieausweis|Ausweis|Protokoll)[^\n]{0,45}?Nr\.?\s*([\w\-\/]{3,20})/i);
   r.ausgabe      = reText(text, /Ausgabe:?\s*((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
                  || reText(text, /(?:OIB[- ]?)?(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
                  || reText(text, /(?:Richtlinie|RL)\.?\s*6\s*(?:Ausgabe:?\s*)?((?:19|20)\d{2})/i);
@@ -1597,6 +1605,33 @@ function extract(text, linePos){
                || reText(text, /G[üu]ltig(?:keitsdatum|keit)?\s*(?:bis)?\s*[: ]*\s?(\d{1,2}\.?\s?(?:J[äa]nner|Jan|Feb|M[äa]rz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)[a-zä]*\.?\s+\d{4})/i)
                || dateNear(/G[üu]ltig(?:keit)?\s*bis|G[üu]ltigkeitsdatum/i);
   r.gueltig_bis = r.gueltig_bis.replace(/\.\s+/g,'.'); // "1. 1. 2027" -> "1.1.2027"
+  // Monatsnamen numerisch ("30.September 2025" -> "30.09.2025", AX3000)
+  const MONAT = {jän:1, jan:1, feb:2, mär:3, mae:3, mar:3, apr:4, mai:5, jun:6, jul:7, aug:8, sep:9, okt:10, nov:11, dez:12};
+  const pad2 = n => String(n).padStart(2,'0');
+  function normDate(s){
+    const m = String(s).trim().match(/^(\d{1,2})\.?\s*([A-Za-zÄÖÜäöü]{3,})\.?\s*((?:19|20)\d{2})$/);
+    const mo = m && MONAT[m[2].toLowerCase().slice(0,3)];
+    return mo ? pad2(m[1])+'.'+pad2(mo)+'.'+m[3] : s;
+  }
+  r.ausstelldatum = normDate(r.ausstelldatum);
+  r.gueltig_bis   = normDate(r.gueltig_bis);
+  // Gültigkeitsdatum ohne lesbares Label (AX3000 stellt es unter die Zeile
+  // "Ausstellungsdatum …", das Label darunter oder nur in der Grafik): ein Ausweis
+  // gilt 10 Jahre (EAVG) -> das Datum genau 10 Jahre nach Ausstellung (bzw. einen
+  // Tag davor) ist das Gültigkeitsdatum.
+  if (!r.gueltig_bis){
+    const a = r.ausstelldatum.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (a){
+      const d0 = new Date(Date.UTC(+a[3]+10, +a[2]-1, +a[1]));
+      const ok = [d0, new Date(d0 - 864e5)].map(d => d.getUTCDate()+'.'+(d.getUTCMonth()+1)+'.'+d.getUTCFullYear());
+      const DRE = /\b(\d{1,2})\.\s?(?:(\d{1,2})\.|\s*([A-Za-zÄÖÜäöü]{3,})\.?)\s*((?:19|20)\d{2})\b/g;
+      for (let m; (m = DRE.exec(text)) !== null; ){
+        const s = normDate(m[2] ? m[1]+'.'+m[2]+'.'+m[4] : m[1]+'.'+m[3]+' '+m[4]);
+        const p = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+        if (p && ok.indexOf((+p[1])+'.'+(+p[2])+'.'+p[3]) >= 0){ r.gueltig_bis = s; break; }
+      }
+    }
+  }
   // "ErstellerIn Nummer: (keine)" ist die Ersteller-NUMMER, nicht der Name.
   r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)|erstellt durch/i, {max:60});
   // ArchiPHYSIK setzt das Label ans Zeilenende ("GWR-Zahl  k. A.  ErstellerIn")
