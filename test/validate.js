@@ -55,7 +55,8 @@ async function pdfToText(buf, tweak) {
 				lastX = pt.x + pt.s.length * 5;
 			}
 			text += `${line}\n`;
-			linePos.push({ page: p, parts });
+			const y = Math.max(...parts.map((q) => q.y));
+			linePos.push({ page: p, y, parts });
 		}
 		text += "\n";
 		linePos.push({ page: p, parts: [] });
@@ -232,7 +233,7 @@ function loadBaseline(p) {
 			console.log(`${base} FEHLER: ${e.message}`);
 			continue;
 		}
-		if (!isEnergieausweis(text)) {
+		if (!isEnergieausweis(text, linePos)) {
 			console.log(`${base} ÜBERSPRUNGEN (kein Energieausweis)`);
 			continue;
 		}

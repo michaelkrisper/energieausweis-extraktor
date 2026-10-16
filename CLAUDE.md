@@ -65,7 +65,7 @@ selbst steckt in `groupLines` im Engine-Block).
 
 **Pipeline:** PDF → `pdfToText` rekonstruiert layouttreuen Text aus den 2D-Textpositionen von pdf.js
 (Items per `groupLines()` zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
-und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,y,w,s}]}` mit den ECHTEN
+und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, y, parts:[{x,y,w,s}]}` (Zeilen-y = oberstes Item) mit den ECHTEN
 pdf.js-Positionen. → `extract(text, linePos)` füllt pro Feld einen Wert (ohne `linePos` fallen alle
 Positions-Helfer auf reine Textlogik zurück). → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
 Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
@@ -147,10 +147,24 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   BF = 0,8·BGF, A/V = A/V_B, lc = V_B/A (bzw. lc·A/V = 1), PEB = PEB n.ern. + PEB ern. (SK und RK),
   SK/RK-Verhältnis derselben Kennzahl (HWB/EEB 0,4–2,5, fGEE 0,6–1,6), gedruckte Inserat-Klasse ↔ Wert,
   Datum (Kalendertag, Gültigkeit nach Ausstellung, ≤ 10 Jahre), spez. Wert × BGF = Jahreswert, wenn auf
-  der Fundzeile genau ein kWh/a- bzw. kg/a-Betrag steht. Stand: 0 Fehlalarme auf allen 74 Korpus-PDFs;
+  der Fundzeile genau ein kWh/a- bzw. kg/a-Betrag steht. Stand: 0 Fehlalarme auf allen 81 Korpus-PDFs (einziges PRÜFEN: `voesendorfbadgasse`, Dokument selbst widersprüchlich, im `_layout` belegt);
   jede neue Regel muss das halten (Ausnahme: das PDF selbst ist widersprüchlich — dann im Fixture-`_layout`
   dokumentieren). Stichprobe auf 128 ungesehenen textbasierten Ausweisen der Reserve: 9 markiert, laut
   Sichtung Dokument-Widersprüche (A/V-Feld passt nicht zu A und V) oder echte Lesefehler in Altformaten.
+- **ArchiPHYSIK-2019-Formular ohne Labels (`apLabellos()`):** ArchiPHYSIK 18–25 (IfEA, Pilz & Partner,
+  RWT plus, Heinrich, Hollabrunn …) druckt ALLE Labels des OIB-2019-Formulars als Vektorgrafik; im
+  Textlayer stehen nur Werte. Eigener Block vor `extract()`, ein Aufruf am Ende von `extract()`
+  (überschreibt die generischen Treffer, die dort nur Datenblatt/Anhang erreichen). Erkennung: Seite
+  mit ArchiPHYSIK-Fußzeile, ohne Formularlabels, mit x-gleich gestapeltem Datumspaar (Ausstellung/
+  Gültigkeit). Zuordnung nur relativ: Spalten = rechtsbündige Wertkanten, Zeilen = Rasterfolge;
+  Standortklima = 15 (WG) / 20 (NWG) Zeilen, Q-Spalte fehlt genau in eAWZ-/fGEE-Zeilen, Q/spez. =
+  BGF, PEB = n.ern. + ern.; Kenndaten über 2 von 3 Formelankern (BF = 0,8·BGF, l_c·A/V = 1,
+  A/V = A/V_B); Deckblatt = Nachbarseite mit Effizienzskala (Vösendorf heftet es HINTER Seite 2),
+  Buchstaben nach x. Was die Anker nicht bestätigen, bleibt leer. `isEnergieausweis(text, linePos)`
+  erkennt so auch reine Formularauszüge ohne ein einziges Stichwort. Belege: 10 Korpus-PDFs
+  `*_2019_*_archiphysik` (5 davon Holdout, vor dem ersten Lauf von Hand geschrieben); alle 20
+  labellosen ArchiPHYSIK-Ausweise der Reserve liegen innerhalb der ersten 8 Seiten — die
+  14-Seiten-Grenze reicht.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
@@ -211,11 +225,11 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 ## Neues Aussteller-Format ergänzen
 
-Geprüft (74 PDFs, Stand 2026-10-16) gegen GEQ (2011–2023, Kärnten/Salzburg/OÖ/Tirol/NÖ, ZEUS-Stempel aller
+Geprüft (81 PDFs, Stand 2026-10-16) gegen GEQ (2011–2023, Kärnten/Salzburg/OÖ/Tirol/NÖ, ZEUS-Stempel aller
 Länder, ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz (Vorarlberg 2015 und Formular 2024 nach BEV 68/2021
 inkl. OIB-Seite 2 im Stapellayout), ILS ZT, e-s-e, FIBY ZT, klimafonds, ETU Gebäudeprofi Duo 6.2–7.4
 (Tirol, OÖ, NÖ, Salzburger Prüfbericht), ArchiPHYSIK (Version 16/17/25 — 25 stellt die Deckblattwerte
-ÜBER die Labelzeile, `numAboveLabel`; auch macOS-Quartz-Neudruck und englisches Gebietsschema), MA 39 Wien,
+ÜBER die Labelzeile, `numAboveLabel`; 18–25 mit OIB 2019 ohne Labels, `apLabellos`; auch macOS-Quartz-Neudruck und englisches Gebietsschema), MA 39 Wien,
 ECOTECH/BuildDesk (2011/2015/2019/2023, OÖ-Variante mit „X =" über der Wertzeile, Ghostscript-Mojibake),
 AX3000/Allplan (H-5055-Layout von 2010 und OIB-2019-Formular inkl. teilgerastertem „Microsoft: Print To
 PDF"-Druck → OIB-Formularraster) — Baujahre 1900–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
