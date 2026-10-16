@@ -44,7 +44,8 @@ Die Libs liegen committet in `vendor/`, damit der Build offline reproduzierbar i
 
 **Zeilenbildung (`groupLines`, im Engine-Block, von Template, validate.js und dump.js gemeinsam
 genutzt):** nach y absteigend; ein Item gehört zur laufenden Zeile, solange es höchstens
-`LINE_TOL` = 1,25 unter deren oberstem Item liegt. Verschiebungsinvariant — das frühere feste Raster
+`LINE_TOL` = 1,25 unter deren oberstem Item liegt; deckungsgleich doppelt/dreifach gedruckte Items
+(Fett-Simulation: AX3000 „ZAZA", macOS-Quartz-Neudruck) werden verworfen. Verschiebungsinvariant — das frühere feste Raster
 `Math.round(y/2)*2` trennte Items 0,2 auseinander, wenn eine Rastergrenze dazwischen lag, und
 gruppierte bei um 1 Einheit versetzter Seite anders (Jitter-Test: 89 von 189 Läufen abweichend).
 1,25 liegt in einer dünnen Stelle der Grundlinienabstände des Korpus: Label/Wert-Versatz bis 1,13
@@ -132,10 +133,11 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   `hwb_ref_sk`/`hwb` bzw. `fgee`. Gilt auch für „Sonstige konditionierte Gebäude" (nur HWB_Ref-Skala):
   `standrae_2023_sonstige` druckt bei HWB Ref,SK = 245,0 das `F` der WG/NWG-Skala — Beleg als
   Assertion `hwb_klasse` im Fixture.
-- **Deckblatt-Kreuzcheck (`deckblattKlassen()`):** Die vier großen Deckblatt-ZAHLEN liegen in der
-  Grafik (30 von 31 Korpus-PDFs), der Skalen-BUCHSTABE je Kennzahl steht aber im Textlayer —
-  spaltenweise unter dem Kopf „HWB PEB CO2 fGEE", per x-Position zugeordnet (15 von 31 PDFs lesbar,
-  Rest bewusst leer statt geraten). Er ist die bessere Quelle für `hwb_klasse`/`fgee_klasse` als der
+- **Deckblatt-Kreuzcheck (`deckblattKlassen()`):** Die vier großen Deckblatt-ZAHLEN liegen meist in der
+  Grafik, der Skalen-BUCHSTABE je Kennzahl steht aber oft im Textlayer — spaltenweise unter dem Kopf
+  „HWB PEB CO2 fGEE", per x-Position zugeordnet, auch vertikal gestapelt auf der Höhe der Skalenstufe
+  (ETU/GEQ; Fenster über die ganze Skala). 43 von 74 Korpus-PDFs lesbar, Rest bewusst leer statt
+  geraten. Kopf „HWB* SK" (NWG OIB 2011) = Skala in kWh/m³a → kein Band-Kreuzcheck. Er ist die bessere Quelle für `hwb_klasse`/`fgee_klasse` als der
   Rechen-Fallback und dient als Gegenprobe: fällt der extrahierte Wert in ein anderes Band als der
   gedruckte Buchstabe (Toleranz ±0,5 % gegen Rundung an der Bandgrenze), setzt `extract()`
   `r.pruefen` und `runScan` daraus den Status `PRÜFEN · Deckblatt ≠ Tabelle`. Werte werden NIE
@@ -145,9 +147,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   BF = 0,8·BGF, A/V = A/V_B, lc = V_B/A (bzw. lc·A/V = 1), PEB = PEB n.ern. + PEB ern. (SK und RK),
   SK/RK-Verhältnis derselben Kennzahl (HWB/EEB 0,4–2,5, fGEE 0,6–1,6), gedruckte Inserat-Klasse ↔ Wert,
   Datum (Kalendertag, Gültigkeit nach Ausstellung, ≤ 10 Jahre), spez. Wert × BGF = Jahreswert, wenn auf
-  der Fundzeile genau ein kWh/a- bzw. kg/a-Betrag steht. Stand: 0 Fehlalarme auf allen 63 Korpus-PDFs;
+  der Fundzeile genau ein kWh/a- bzw. kg/a-Betrag steht. Stand: 0 Fehlalarme auf allen 74 Korpus-PDFs;
   jede neue Regel muss das halten (Ausnahme: das PDF selbst ist widersprüchlich — dann im Fixture-`_layout`
-  dokumentieren).
+  dokumentieren). Stichprobe auf 128 ungesehenen textbasierten Ausweisen der Reserve: 9 markiert, laut
+  Sichtung Dokument-Widersprüche (A/V-Feld passt nicht zu A und V) oder echte Lesefehler in Altformaten.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
@@ -189,6 +192,12 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   erneuerbarer Energie, GWP LC) haben noch KEINE Spalten — erst mit echten Ausweisen nachziehen.
 - `isEnergieausweis(text)` — Punkte-Schwelle (≥2); darunter wird die Datei übersprungen (in ENERGIE-
   Ordnern liegen auch fremde PDFs).
+- **Text-Normalisierung vor der Extraktion (alle längentreu, Text UND Positionsdaten):** U+0000 statt
+  Leerzeichen (Foxit), „kWh/m2a" → „kWh/m²a" (OIB-2025-Muster), Unicode-Minus, und **englisches
+  Zahlenformat** (Druck unter englischem Gebietsschema: „1,554.0m³", „315.3kWh/m²a"): überwiegen
+  Dezimalpunkte mit 1–2 Nachkommastellen vor Einheiten die Dezimalkommas deutlich (≥ 8 und > 4×), werden
+  „." und „," in Zahlen getauscht (Datumsangaben/Versionsnummern bleiben). Datum zusätzlich
+  `TT-MM-JJJJ` und ISO.
 - **Mojibake-Reparatur:** PDFs aus einem Ghostscript-Druckpfad (PDF24 Creator; Beleg `proholz_2019_nwg`:
   ECOTECH 3.3.1679, Producer „GPL Ghostscript 10.02.1") liefern Latin-1-Bytes MacRoman-dekodiert
   (`ƒ`=Ä, `‰`=ä, `≤`=², `∞`=°) — kein Mac-/ArchiPHYSIK-Merkmal, die ArchiPHYSIK-PDFs des Korpus sind
@@ -202,9 +211,14 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 ## Neues Aussteller-Format ergänzen
 
-Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 für WG und NWG und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
-e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019, auch Ghostscript-Mojibake), AX3000/Allplan (H-5055-Layout, gestapelte
-Werte) — Baujahre 2010–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
+Geprüft (74 PDFs, Stand 2026-10-16) gegen GEQ (2011–2023, Kärnten/Salzburg/OÖ/Tirol/NÖ, ZEUS-Stempel aller
+Länder, ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz (Vorarlberg 2015 und Formular 2024 nach BEV 68/2021
+inkl. OIB-Seite 2 im Stapellayout), ILS ZT, e-s-e, FIBY ZT, klimafonds, ETU Gebäudeprofi Duo 6.2–7.4
+(Tirol, OÖ, NÖ, Salzburger Prüfbericht), ArchiPHYSIK (Version 16/17/25 — 25 stellt die Deckblattwerte
+ÜBER die Labelzeile, `numAboveLabel`; auch macOS-Quartz-Neudruck und englisches Gebietsschema), MA 39 Wien,
+ECOTECH/BuildDesk (2011/2015/2019/2023, OÖ-Variante mit „X =" über der Wertzeile, Ghostscript-Mojibake),
+AX3000/Allplan (H-5055-Layout von 2010 und OIB-2019-Formular inkl. teilgerastertem „Microsoft: Print To
+PDF"-Druck → OIB-Formularraster) — Baujahre 1900–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
 Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
 bleiben dort bewusst leer. Workflow:
@@ -213,7 +227,15 @@ bleiben dort bewusst leer. Workflow:
    anlegen (Werte NUR aus dem Dump, nie aus dem Extraktor-Output; Konventionen unten),
    `node test/validate.js test/samples` laufen lassen.
 2. Fehlt/falsch ein Feld → das passende `byLabel`/`metric`/Regex in `extract()` anpassen.
-3. `python3 build.py` → erneut validieren → committen.
+3. `python3 build.py` → erneut validieren (auch `--jitter`) → committen.
+
+**Holdout statt Selbstbestätigung:** Neue Engine-Regeln entstehen am Korpus — ob sie generalisieren,
+zeigt nur ein ungesehener Satz. Vorgehen (2026-10-16 erstmals): NACH den Engine-Änderungen 6–10 neue
+Ausweise unterschiedlicher Software/Bundesländer wählen, Fixtures von Hand aus dem Dump schreiben (OHNE
+vorher den Extraktor darauf laufen zu lassen), Quote messen und berichten, erst DANN Lücken beheben und
+die Fixtures in den Korpus übernehmen. Ergebnis 2026-10-16: 614/623 = 98,6 % (Engine vor der Branch-Arbeit:
+94,9 %); die Lücken (Doppelglyphen, zweizeilige WB-Systeme, Stapellayout der eawz-OIB-Seite, CO2 aus
+fGEE-Folgezeile) sind behoben.
 
 **Fixture-Konventionen (Soll-Werte):**
 - `kategorie` = normierte OIB-Gebäudekategorie, genau drei Werte: `Wohngebäude`, `Nichtwohngebäude`,
