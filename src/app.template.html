@@ -472,6 +472,9 @@ function groupLines(items){
   const out = []; let cur = null, top = 0;
   for (const it of its){
     if (!cur || top - it.y > LINE_TOL){ cur = []; out.push(cur); top = it.y; }
+    // Manche Druckpfade legen Glyphen doppelt/dreifach deckungsgleich ab (Fett-
+    // Simulation; AX3000 "ZAZA", macOS-Quartz "HWBRef:HWBRef:HWBRef:") -> verwerfen
+    if (cur.some(o => o.s === it.s && Math.abs(o.x - it.x) < 0.5 && Math.abs(o.y - it.y) < 0.5)) continue;
     cur.push(it);
   }
   for (const l of out) l.sort((a, b) => a.x - b.x);
@@ -540,7 +543,7 @@ function extract(text, linePos){
                  // nur als Label am Zellenanfang ("Objekt   Wohnanlage Rautenweg 11"), nicht
                  // in Überschriften ("SPEZIFISCHER STANDORT-REFERENZ-HEIZWÄRMEBEDARF"), und
                  // nur mit Hausnummer ("Standort:Seekirchen am Wallersee" ist der Ort)
-                 || byLabel(lines, /^(?:Standort|Objekt)\b(?!-)/, {max:72, atStart:true}).replace(/^(?!.*\d).*$/, '');
+                 || byLabel(lines, /^(?:Standort|Objekt)\b(?!-)/, {max:72, atStart:true}).replace(/^(?!.*\d).*$/, '').replace(/^[\s,;:]*\d{4}\s+\D.*$/, '');
   // alle "PLZ/Ort"-Treffer sammeln; bevorzuge den mit Bezirks-Bindestrich
   // (Hauptseite "1220 Wien-Donaustadt" statt Deckblatt "1220/Wien").
   {
@@ -654,7 +657,7 @@ function extract(text, linePos){
   // "Baujahr vor 1978" / "Baujahr ab 1985" = Baujahrsklasse eines Kessels (Anhang)
   r.baujahr      = byLabel(lines, /Baujahr(?!\s+(?:vor|von|bis|ab|nach)\b)|Errichtungsjahr|Erbaut/i, {num:true, ok:rng(1000, 2100)})
                  // "Baujahr von 1988 bis 1993" = Baujahrsklasse des Kessels (Anhang), nicht des Gebäudes
-                 || reText(text, /(?:Baujahr|Errichtungsjahr|Erbaut)(?!\s+von\s)\D{0,8}((?:18|19|20)\d{2})/i);
+                 || reText(text, /(?:Baujahr|Errichtungsjahr|Erbaut)(?!\s+(?:von|vor|bis|ab|nach)\s)\D{0,8}((?:18|19|20)\d{2})/i);
   // EA-Art/Umsetzungsstand + Letzte Veränderung (Deckblatt OIB 2015+). Nur
   // plausible Werte behalten — die Labels stehen oft ohne Wert auf der Zeile
   // und byLabel würde sonst Nachbarfelder greifen.
@@ -1217,9 +1220,13 @@ function extract(text, linePos){
       // (AX3000 roitham: EEB RK nur im Bild, darunter "Gesamtenergieeffizienz-Faktor
       // fGEE,RK = 2,05" — dessen Wert ist kein EEB)
       const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar|Gesamtenergieeffizienz|f\s*GEE|Kohlendioxid/i.test(lines[l+1]||'');
+      // AX3000-artiges Stapellayout: "Heizwärmebedarf  HWB=" / Subskriptzeile "RK" /
+      // Wertzeile "22,4 kWh/m²a" -> ist die Folgezeile nur Subskript, zählt die übernächste
+      const SUBONLY = /^\s*(?:(?:Ref|RK|SK|zul|GEE|EEB|HWB|PEB|KB\*?|n\.?\s*ern\.?|ern\.?|2eq|tw|h|H)[,.\s]*)+$/;
       const v = specOnLine(scope, opt.unit, geRow, l)
              || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow, l-1) : '')
-             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1, opt.strictNext) : '');
+             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1, opt.strictNext) : '')
+             || (nextOk && SUBONLY.test(lines[l+1]||'') && /=\s*$/.test(lines[l]) ? specOnLine(lines[l+2]||'', opt.unit, geRow, l+2, true) : '');
       if (v!=='' && v!=='k.A.') return v;
     }
     return '';
@@ -1356,12 +1363,15 @@ function extract(text, linePos){
         if (j === l || !pos[j] || pos[j].page !== pos[l].page) continue;
         for (const s of segs(j)) if (s.x > xe && Math.abs(s.y - y0) <= 5) got.push(s);
       }
-      return got.sort((a, b) => b.y - a.y).map(s => s.t).join(' ');
+      // Silbentrennung am Zeilenende ("Strom (Österreich-" / "Mix)") ohne Leerzeichen
+      return got.sort((a, b) => b.y - a.y).map(s => s.t).join(' ').replace(/(\S)- (?=\S)/g, '$1-');
     }
     return '';
   }
-  if (!r.rh_system) r.rh_system = textAroundLabel(/RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i);
-  if (!r.ww_system) r.ww_system = textAroundLabel(/WW-?WB-?System\s*\(?\s*prim[^)]*\)?/i);
+  // Vorrang vor der Textlogik, die bei leerer Labelzeile nur die untere Hälfte
+  // (Folgezeile) greift (admont: "Mix)" statt "Strom (Österreich-Mix)")
+  r.rh_system = textAroundLabel(/RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i) || r.rh_system;
+  r.ww_system = textAroundLabel(/WW-?WB-?System\s*\(?\s*prim[^)]*\)?/i) || r.ww_system;
   const NUMU = u => new RegExp('('+NUMRE+')\\s*'+u);
   if (!r.kompaktheit)  r.kompaktheit  = nearLabel(/Kompaktheit/i, NUMU('(?:1\\/)?m(?![²³])'), {ok:rng(0.02, 3)});
   if (!r.char_laenge)  r.char_laenge  = nearLabel(/charakteristische\s+L[äa]nge/i, NUMU('m(?![²³])'), {ok:rng(0.2, 40)});
@@ -1506,7 +1516,7 @@ function extract(text, linePos){
   // ohne \b vor PEB: ECOTECH klebt das Label an ("nichtPEB-n.ern. RK").
   r.peb_nern_rk = byAbbrAdjacent(/PEB[-\s,]*n\.?\s*ern\.?[\s,]*RK\b/i, {});
   r.peb_ern_rk  = byAbbrAdjacent(/\bPEB[-\s,]*ern\.?[\s,]*RK\b/i, {});
-  r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
+  r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a', strictNext:true})
           || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a', {notSuffix:NOT_RK})   // "CO2eq RK28,00 kg/ma 12,72" (eawz BTV)
           || byAbbr(/\bCO[2,]/i, 'kg\\/m²a', {notSuffix:NOT_RK})    // OCR: "CO," statt "CO2"
           || byAbbr(/^\s*CO\s*$/, 'kg\\/m²a', {notSuffix:NOT_RK, nextAny:true});  // ECOTECH stapelt: "CO" / "2  41.155 kg/a  52,8 kg/m²a"
@@ -1632,7 +1642,10 @@ function extract(text, linePos){
   })();
   // PVE einheitsstrikt (byAbbrAdjacent verlangt kWh/m²a): der shortComma-Fallback
   // von byGerman würde sonst den fGEE aus der Zeile über dem Label greifen.
-  r.pve      = byAbbrAdjacent(/Photovoltaik-?\s*Export/i, {});
+  r.pve      = byAbbrAdjacent(/Photovoltaik-?\s*Export/i, {})
+            || byAbbrAdjacent(/(?<![A-Za-z])EXPORT\s*,\s*SK/, {});   // Stapellayout: Subskript-Zeile mit Wert
+  // CO2: "äquivalente Kohlendioxidemissionen  1.127 kg/a" über "f = 0,58" (OIB-Seite der
+  // eawz) -> aus der Folgezeile nur einheitsbehaftete Werte (sonst fGEE als CO2)
   // -- Energieaufwandszahlen (dimensionslos, daher nur short-comma-Fallback)
   r.eawz_ww = byGerman(/Energieaufwandszahl\s+Warmwasser/i, {});
   r.eawz_rh = byGerman(/Energieaufwandszahl\s+Raumheizung/i, {});
@@ -1752,7 +1765,10 @@ function extract(text, linePos){
       // Label-Zeile bevorzugen; Folgezeile nur, wenn sie selbst keinen Wert hat
       // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
       const FGV = /(?<![\d.,])\d+,\d+(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
-      const sl = FGV.test(lines[l]) ? l : l+1; FGV.lastIndex = 0;
+      let sl = FGV.test(lines[l]) ? l : l+1; FGV.lastIndex = 0;
+      // "Gesamtenergieeffizienz-Faktorf  =  f  =" / "GEE,RK   GEE,RK,zul" / "0,59"
+      if (sl === l+1 && !FGV.test(lines[l+1]||'') && /^\s*GEE\b/.test(lines[l+1]||'') && /=\s*$/.test(lines[l])) sl = l+2;
+      FGV.lastIndex = 0;
       const src = lines[sl] || '';
       // fGEE ist dimensionslos. Eine Zeile, deren Zahlen alle eine Energieeinheit
       // tragen, ist nicht die fGEE-Zeile, auch wenn sie "fGEE" erwähnt —
