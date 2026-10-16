@@ -1247,6 +1247,34 @@ function extract(text, linePos){
     }
     return '';
   }
+  // Zellen einer Textzeile mit x/y ihres Anfangs (Positionsdaten mit Baseline)
+  function segs(j){
+    const m = xmap(j); if (!m || !m.cy) return [];
+    const out = []; const re = /\S+(?: \S+)*/g;
+    for (let g; (g = re.exec(m.s)) !== null; ) out.push({t: g[0], i: g.index, x: m.cx[g.index], y: m.cy[g.index]});
+    return out;
+  }
+  // Text, der rechts vom Label ÜBER und UNTER der Labelzeile steht, während die
+  // Labelzeile selbst dort leer ist: AX3000 zentriert zweizeilige Werte vertikal
+  // um das Label ("Fernwärme aus" / "RH-WB-System (primär)" / "Heizwerk (erneuerbar)").
+  function textAroundLabel(labelRe){
+    if (!pos) return '';
+    for (let l=0; l<lines.length && l<pos.length; l++){
+      const m = xmap(l); if (!m || !m.cy) continue;
+      const hit = m.s.match(labelRe); if (!hit) continue;
+      const i1 = hit.index + hit[0].length;
+      if (m.s.slice(i1).trim()) return '';     // Feld auf der Labelzeile belegt -> Textlogik gilt
+      const xe = m.cx[i1-1], y0 = m.cy[hit.index], got = [];
+      for (let j=l-3; j<=l+3; j++){
+        if (j === l || !pos[j] || pos[j].page !== pos[l].page) continue;
+        for (const s of segs(j)) if (s.x > xe && Math.abs(s.y - y0) <= 5) got.push(s);
+      }
+      return got.sort((a, b) => b.y - a.y).map(s => s.t).join(' ');
+    }
+    return '';
+  }
+  if (!r.rh_system) r.rh_system = textAroundLabel(/RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i);
+  if (!r.ww_system) r.ww_system = textAroundLabel(/WW-?WB-?System\s*\(?\s*prim[^)]*\)?/i);
   const NUMU = u => new RegExp('('+NUMRE+')\\s*'+u);
   if (!r.kompaktheit)  r.kompaktheit  = nearLabel(/Kompaktheit/i, NUMU('(?:1\\/)?m(?![²³])'), {ok:rng(0.02, 3)});
   if (!r.char_laenge)  r.char_laenge  = nearLabel(/charakteristische\s+L[äa]nge/i, NUMU('m(?![²³])'), {ok:rng(0.2, 40)});
@@ -1699,6 +1727,51 @@ function extract(text, linePos){
       const up = cells(lines[l-1]).join(' ').trim();
       if (/[A-Za-z]{3}/.test(up) && !/^ERSTELLT/i.test(up)){ r.aussteller = up.slice(0,60); break; }
     }
+  }
+  // Positionslogik (schlägt die Textlogik, wenn sie greift): der Name steht in
+  // derselben Tabellenzeile wie das Label — rechts daneben oder, weil der
+  // y-Bucket die Zeile teilt, knapp darüber/darunter (goeming, villach: Baseline
+  // ±1; die Textlogik griff dort das nächste Label bzw. die Anschrift eines
+  // späteren "ErstellerIn"-Blocks). Mehrzeilige Namen: Folgezeilen exakt x-bündig
+  // unter dem Namen (ECOTECH 2023 "plansprechend" / "DI Hannes Wachernig", GEQ
+  // "… GmbH & Co" / "KG"), höchstens zwei, ohne Ziffer — darunter folgt die
+  // Anschrift mit Hausnummer/PLZ.
+  {
+    const LBL = /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)/;
+    const LABELISH = /^(?:Organisation|Unterschrift|ERSTELLT|GWR|Ausstellungs|G[üu]ltigkeits|Gesch[äa]ftszahl|Stempel|ErstellerIn|Aussteller|EA-?Nr|EAW-?Nr)/i;
+    const name = t => /[A-Za-zÄÖÜäöü]{2}/.test(t) && !LABELISH.test(t) && !NEXT_LABEL.test(t);
+    let pv = '';
+    for (let l=0; l<lines.length && l<(pos ? pos.length : 0) && !pv; l++){
+      const m = xmap(l); if (!m || !m.cy) continue;
+      const hit = m.s.match(LBL); if (!hit) continue;
+      // Label mitten in einer Zelle nach einem Wort = Fließtext ("Der Aussteller des
+      // Energieausweises haftet …"); angeklebt an ein Nachbarlabel bleibt erlaubt
+      const pre = m.s.slice(0, hit.index).split(/\s{2,}/).pop();
+      if (/\S\s+$/.test(pre)) continue;
+      const i1 = hit.index + hit[0].length, xe = m.cx[i1-1], ly = m.cy[hit.index];
+      let v = null;
+      // rechts daneben (auch angeklebt: "ErstellerInMPT Engineering GmbH")
+      const rest = m.s.slice(i1).match(/^\s*:?\s*(\S+(?: \S+)*)/);
+      if (rest && name(rest[1])){ const k = i1 + rest[0].length - rest[1].length; v = {t: rest[1], x: m.cx[k], y: ly, l}; }
+      // sonst knapp darüber/darunter rechts vom Label (alle Zellen der Zeile)
+      for (const j of (v ? [] : [l-1, l+1])){
+        if (!pos[j] || pos[j].page !== pos[l].page) continue;
+        const sg = segs(j).filter(s => s.x > xe && Math.abs(s.y - ly) <= 5);
+        if (sg.length && sg.every(s => name(s.t))){ v = {t: sg.map(s => s.t).join(' '), x: sg[0].x, y: sg[0].y, l: j}; break; }
+      }
+      if (!v) continue;
+      let out = v.t, last = v.y;
+      for (let k = v.l+1, n = 0; k < lines.length && k <= v.l+4 && n < 2; k++){
+        if (!pos[k] || pos[k].page !== pos[v.l].page) break;
+        const sg = segs(k).filter(s => s.x > v.x - 20);
+        if (!sg.length) continue;                          // nur Labels der linken Spalte
+        const s = sg[0];
+        if (sg.length > 1 || Math.abs(s.x - v.x) > 2 || last - s.y > 14 || /\d/.test(s.t) || !name(s.t)) break;
+        out += ' ' + s.t; last = s.y; n++;
+      }
+      pv = out;
+    }
+    if (pv) r.aussteller = pv.slice(0, 80);
   }
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }
