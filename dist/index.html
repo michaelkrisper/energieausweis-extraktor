@@ -1478,10 +1478,14 @@ function extract(text, linePos){
               || byGerman(/Referenz-?Heizw[äa]rmebedarf/i, {section:'SK', afterAbbr:/\bHWB\b/});
   r.hwb_ref_rk = byAbbrAdjacent(/HWB\s*Ref\.?,?\s*RK/i, {section:'RK'})
               || byGerman(/Referenz-?Heizw[äa]rmebedarf/i, {section:'RK', afterAbbr:/\bHWB\b/});
-  r.wwwb   = byGerman(/Warmwasserw[äa]rmebedarf/i, {}) || byAbbr(/\bWWWB\b/i);
+  // Abkürzungs-Fallbacks: Zeilen mit RK-/Ref-Subskript (auch in der Folgezeile)
+  // sind nie die SK-Kennzahl (krems_2015: "Heizenergiebedarf  HEB RK  31,7").
+  const NOT_RK = /\bRK(?![A-Za-z])|\bRef/;
+  // WWWB nur in Großbuchstaben: "wwwb [Wh/(m²d)] 17,50" ist der TÄGLICHE Bedarf (ECOTECH-Anhang)
+  r.wwwb   = byGerman(/Warmwasserw[äa]rmebedarf/i, {}) || byAbbr(/\bWWWB\b/);
   r.heb    = byAbbrAdjacent(/\bHEB\s*SK\b/i, {section:'SK'})
           || byGerman(/Heizenergiebedarf/i, {section:'SK', notSuffix:/Referenz/i, up:true})
-          || byAbbr(/\bHEB\b/i);
+          || byAbbr(/\bHEB\b/i, undefined, {notSuffix:NOT_RK});
   r.hteb   = byAbbr(/\bHTEB\b(?!\s*[-,]?\s*RH)/i, undefined, {last:true});
   // ECOTECH 2015 / ArchiPHYSIK 16 nennen den EEB "End-/Lieferenergiebedarf"
   // (bzw. "E/LEB") — das notSuffix-Lieferenergie gilt nur dem Erklärungstext.
@@ -1496,7 +1500,6 @@ function extract(text, linePos){
   // RK-Zeilen sind nie der PEB SK: eawz 2024 "PEB  Spezifischer … Primärenergiebedarf
   // am fiktiven Referenzstandort (RK …" / "RK  464,07 kWh/m²a" und die BTV-Zeile
   // "PEB  190,00 kwh/ma 91,34 kwh/ma" / "RK …" (Soll | Ist im Referenzklima)
-  const NOT_RK = /\bRK(?![A-Za-z])|\bRef/;
   r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK', notSuffix:NOT_RK})
           || byGerman(/Prim[äa]renergiebedarf\b/i, {notSuffix:NOT_RK})
           || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i, undefined, {notSuffix:NOT_RK});
