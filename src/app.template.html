@@ -464,8 +464,8 @@ function isEnergieausweis(text, linePos){
 //  - Standortklima: 15 (WG) bzw. 20 (NWG) Zeilen in fester Formularreihenfolge;
 //    die Q-Spalte (kWh/a) fehlt GENAU in den eAWZ-/fGEE-Zeilen, jedes Paar
 //    erfüllt Q / spez. = BGF (Flächenbezug), PEB = PEB n.ern. + PEB ern.
-//  - Gebäudekenndaten: BGF > BF, V > BGF, A/V = A/V_B, l_c = V_B/A.
-//  - Deckblatt (Vorseite): Zeilenraster ab der PLZ-Zeile, Klassenbuchstaben
+//  - Gebäudekenndaten: BGF > BF, V > BGF; 2 von 3: BF = 0,8·BGF, l_c·A/V = 1, A/V = A/V_B.
+//  - Deckblatt (Nachbarseite): Zeilenraster ab der PLZ-Zeile, Klassenbuchstaben
 //    nach x (HWB PEB CO2 fGEE).
 //  Was nicht eindeutig zuordenbar ist, bleibt leer. Rückgabe: Feldobjekt, das in
 //  extract() die generischen Werte ÜBERSCHREIBT, oder null (anderes Layout).
@@ -580,7 +580,10 @@ function apLabellos(pos, text, fix){
       for (let s=0; !kd && s+6 <= run.length; s++){
         const [bgf, bf, vb, a, av, lc] = run.slice(s, s+6).map(i => isNum(i.s) ? val(i.s) : NaN);
         if (!(vb > bgf && bgf > bf && bf > 0 && a > 0)) continue;
-        if (Math.abs(av - a/vb) > 0.012 || Math.abs(lc - vb/a) > 0.012) continue;
+        // mind. 2 von 3: BF = 0,8·BGF (ÖNORM B 8110-6-1), l_c = 1/(A/V), A/V = A/V_B
+        // (Vösendorf druckt l_c/A/V aus einer anderen Hüllfläche als A: 2,81 ≠ V_B/A 2,87)
+        if ([Math.abs(bf - 0.8*bgf) <= 0.002*bgf + 0.1, Math.abs(lc*av - 1) <= 0.04,
+             Math.abs(av - a/vb) <= 0.012].filter(Boolean).length < 2) continue;
         kd = {y0: run[s].y, pitch: (run[s].y - run[s+5].y)/5, r: run[s].r, col: run};
         KD.forEach((k,i) => { out[k] = cleanNum(run[s+i].s); });
       }
@@ -626,12 +629,13 @@ function apLabellos(pos, text, fix){
     out.ausgabe = 'April 2019';                  // 15/20-Zeilen-Raster mit eAWZ WW/RH/H gibt es nur in OIB 2019
   }
 
-  // -- Deckblatt (Seite 1 des Ausweises, vor Seite 2) -------------------------
+  // -- Deckblatt (Seite 1 des Ausweises; meist die Vorseite, Vösendorf heftet sie
+  // HINTER Seite 2) — erkannt an der Effizienzskala bzw. der KG-Nr. in der PLZ-Zeile
   const DB = [['','ea_art'], ['','baujahr'], ['nutzungsprofil','letzte_veraenderung'],
               ['adresse','kg'], ['plz_ort','kg_nr'], ['gstnr','seehoehe']];
   for (const [l, rr] of DB){ if (l) out[l] = ''; out[rr] = ''; }
   let letters = null;
-  for (let p = page-1; p >= 1 && p >= page-3; p--){
+  for (const p of [page-1, page+1, page-2, page+2, page-3]){
     const b = body(pg.get(p) || []);
     let plz = null, ort = '';
     for (const i of b){
@@ -656,16 +660,6 @@ function apLabellos(pos, text, fix){
       return Math.abs(plz.y - k*pitch - y) <= pitch*0.3 ? 4 + k : -1; };
     const cellL = k => b.filter(i => Math.abs(i.x-plz.x) < 3 && slot(i.y) === k).map(i => i.s).join(' ').trim();
     const cellR = k => R === null ? '' : b.filter(i => Math.abs(i.x-R) < 3 && slot(i.y) === k).map(i => i.s).join(' ').trim();
-    out.plz_ort = (plz.s.slice(0,4) + ' ' + ort).slice(0, 40);
-    out.nutzungsprofil = cellL(2).slice(0, 60);
-    out.adresse = cellL(3).slice(0, 72);
-    out.gstnr = /\d/.test(cellL(5)) ? cellL(5).slice(0, 40) : '';
-    out.ea_art = /^[A-Za-zÄÖÜ]/.test(cellR(0)) ? cellR(0).slice(0, 28) : '';
-    out.baujahr = (cellR(1).match(/^(?:1[5-9]|20)\d{2}$/) || [''])[0];
-    out.letzte_veraenderung = /(?:18|19|20)\d{2}/.test(cellR(2)) ? cellR(2).slice(0, 40) : '';
-    out.kg = /^[A-ZÄÖÜ]/.test(cellR(3)) ? cellR(3).slice(0, 28) : '';
-    out.kg_nr = /^\d{3,6}$/.test(cellR(4)) ? cellR(4) : '';
-    out.seehoehe = cleanNum((cellR(5).match(/^(\d{1,3}(?:[ .]\d{3})*(?:,\d+)?|\d+(?:,\d+)?)\s*m?$/) || ['',''])[1]);
     // Klassenbuchstaben der Effizienzskala: genau vier, nach x = HWB PEB CO2 fGEE
     const L = [];
     for (const i of b.filter(i => i.y < plz.y - 2*pitch).sort((a,c) => a.x-c.x)){
@@ -673,6 +667,18 @@ function apLabellos(pos, text, fix){
         L[L.length-1] = {...L[L.length-1], s: L[L.length-1].s + i.s, r: i.r};
       else if (/^[A-G]\+{0,2}$/.test(i.s)) L.push(i);
     }
+    // Vorgeschalteter Bericht ("2331 Vösendorf" im Adressblock) ist kein Deckblatt
+    if (L.length < 3 && !/^\d{5}$/.test(cellR(4))) continue;
+    out.plz_ort = (plz.s.slice(0,4) + ' ' + ort).slice(0, 40);
+    out.nutzungsprofil = cellL(2).slice(0, 60);
+    out.adresse = cellL(3).slice(0, 72);
+    out.gstnr = /\d/.test(cellL(5)) ? cellL(5).slice(0, 40) : '';
+    out.ea_art = /^[A-Za-zÄÖÜ]/.test(cellR(0)) ? cellR(0).slice(0, 28) : '';
+    out.baujahr = (cellR(1).match(/^(?:(?:vor|ca\.?|um)\s+)?((?:1[5-9]|20)\d{2})$/i) || ['',''])[1]; // "vor 1900" -> 1900 (wie wien_2015_nwg)
+    out.letzte_veraenderung = /(?:18|19|20)\d{2}/.test(cellR(2)) ? cellR(2).slice(0, 40) : '';
+    out.kg = /^[A-ZÄÖÜ]/.test(cellR(3)) ? cellR(3).slice(0, 28) : '';
+    out.kg_nr = /^\d{3,6}$/.test(cellR(4)) ? cellR(4) : '';
+    out.seehoehe = cleanNum((cellR(5).match(/^(\d{1,3}(?:[ .]\d{3})*(?:,\d+)?|\d+(?:,\d+)?)\s*m?$/) || ['',''])[1]);
     if (L.length === 4) letters = {hwb: L[0].s, fgee: L[3].s};
     break;
   }
