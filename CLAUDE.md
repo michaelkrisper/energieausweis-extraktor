@@ -156,9 +156,19 @@ Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 20
 bleiben dort bewusst leer. Workflow:
 
 1. PDF nach `test/samples/` legen, Fixture mit `_quelle` (direkte URL) + `_sha256` (`sha256sum`)
-   anlegen, `node test/validate.js test/samples` laufen lassen.
+   anlegen (Werte NUR aus dem Dump, nie aus dem Extraktor-Output; Konventionen unten),
+   `node test/validate.js test/samples` laufen lassen.
 2. Fehlt/falsch ein Feld → das passende `byLabel`/`metric`/Regex in `extract()` anpassen.
 3. `python3 build.py` → erneut validieren → committen.
+
+**Fixture-Konventionen (Soll-Werte):**
+- `kategorie` = normierte OIB-Gebäudekategorie, genau drei Werte: `Wohngebäude`, `Nichtwohngebäude`,
+  `Sonstige konditionierte Gebäude` — aus dem Formulartitel „Energieausweis für …" (auch bei Umbruch
+  über zwei Zeilen). Nur asserten, wenn der Titel im Textlayer steht. Die Engine leitet sie sonst aus
+  einem eindeutigen OIB-Nutzungsprofil ab (AX3000 druckt den Titel nur als Grafik).
+- `nutzungsprofil` = Detailangabe wie gedruckt (Bürogebäude, Einfamilienhaus, „Wohngebäude mit drei bis
+  neun Nutzungseinheiten", Plural „Mehrfamilienhäuser" …), mehrzeilige Werte vollständig.
+- Feld leer gedruckt („---", „-", „k.A.") → `""` asserten; Key weglassen = nicht geprüft.
 
 ## CI / Deploy
 

@@ -539,10 +539,6 @@ function extract(text, linePos){
   }
   r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
-  r.kategorie    = reText(text, /Energieausweis f[üu]r (Sonstige konditionierte Geb[äa]ude)/i) // OIB 2023: dritte Kategorie
-                 || reText(text, /\b(Einfamilienhaus|Mehrfamilienhaus|Reihenhaus|B[üu]rogeb[äa]ude)\b/i)
-                 || (/Nicht-?Wohngeb[äa]ude/i.test(text) ? 'Nichtwohngebäude'
-                    : /\bWohngeb[äa]ude\b/i.test(text) ? 'Wohngebäude' : '');
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp|Geb[äa]udeart/i, {max:60})
                      .replace(/\s*(Letzte Ver[äa]nderung|Baujahr|Letzte Ver|Erbaut).*$/i,'').trim();
   if (!r.nutzungsprofil){
@@ -554,10 +550,29 @@ function extract(text, linePos){
       if (/^Nutzungsprofil\b/i.test(lines[l].trim()) && /^[A-ZÄÖÜ][a-zäöüß]/.test(lines[l-1].trim())){
         let v = cells(lines[l-1])[0].trim();
         const cont = cells(lines[l+1]||'')[0] || '';
-        if (/(?:mit|einer|oder|zwei|und|f[üu]r|-)$/i.test(v) && /^[A-ZÄÖÜa-zäöüß]+$/.test(cont)) v += ' '+cont;
+        // "…mit drei bis neun" / Label / "Nutzungseinheiten": die Folgezeile ist
+        // Teil des Werts, wenn er auf ein Bindewort endet oder sie das Schlusswort
+        // der OIB-Profilbezeichnung ist.
+        if (/^[A-ZÄÖÜa-zäöüß]+$/.test(cont) && (/(?:mit|einer|oder|zwei|und|f[üu]r|-)$/i.test(v) || /^Nutz(?:ungs)?einheiten$/i.test(cont))) v += ' '+cont;
         r.nutzungsprofil = v.slice(0,60).trim(); break;
       }
     }
+  }
+  // Gebäudekategorie = normierte OIB-Kategorie mit genau drei Werten. Quelle ist
+  // der Formulartitel ("Energieausweis für Nicht-Wohngebäude"; eawz bricht
+  // "…Sonstige konditionierte" / "Gebäude" um). Die Detailangabe (Bürogebäude,
+  // Einfamilienhaus, "Wohngebäude mit drei bis neun Nutzungseinheiten" …) steht
+  // im Nutzungsprofil. Ohne Titel im Textlayer (AX3000: nur Grafik) wird die
+  // Kategorie aus einem eindeutigen OIB-Nutzungsprofil abgeleitet, sonst leer.
+  {
+    const KAT = s => /sonstige/i.test(s) ? 'Sonstige konditionierte Gebäude' : /nicht/i.test(s) ? 'Nichtwohngebäude' : 'Wohngebäude';
+    const t = reText(text, /Energieausweis\s+f[üu]r\s+(Sonstige\s+konditionierte|Nicht-?\s*Wohngeb[äa]ude|Wohngeb[äa]ude)/i);
+    const np = r.nutzungsprofil;
+    r.kategorie = t ? KAT(t)
+      : /^Sonstige/i.test(np) ? 'Sonstige konditionierte Gebäude'
+      : /Wohngeb[äa]ude|Einfamilienh|Mehrfamilienh|Reihenh|Doppelh|Wohnh[äa]us|Wohnanlage/i.test(np) && !/Nicht/i.test(np) ? 'Wohngebäude'
+      : /B[üu]ro|Bildung|Schul|Kindergart|Krankenh|Pflegeh|Pension|Hotel|Gastst|Veranstaltung|Sportst|Verkaufsst|Hallenbad|Mehrzweck|Nicht-?\s*Wohn/i.test(np) ? 'Nichtwohngebäude'
+      : '';
   }
   r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr|Erbaut/i, {num:true})
                  // "Baujahr von 1988 bis 1993" = Baujahrsklasse des Kessels (Anhang), nicht des Gebäudes
