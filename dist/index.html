@@ -1166,11 +1166,14 @@ function extract(text, linePos){
   // schreibt die Einheiten dann in die Folgezeile ("erfüllt kWh/m³a≥KB* RK") und
   // lässt die Zahlen nackt stehen ("1,00  0,11") — Reihenfolge Grenze, dann Ist.
   // l: Zeilenindex von line (für die Positionslogik, optional).
-  function specOnLine(line, unit, geRow, l){
+  // strict: nur Werte MIT Einheit (Folgezeilen: eine einheitslose Zahl dort ist
+  // meist eine Tabellenspalte, z.B. ArchiPHYSIK-Anlagentechnik "SB  100,0  2.033"
+  // = Anteil % | kWh/a unter "Betriebsstrombedarf")
+  function specOnLine(line, unit, geRow, l, strict){
     unit = unit || 'kWh\\/m²a';
     line = afterGE(line, unit);
     const withUnit = (line.match(new RegExp('('+NUMRE+')\\s*'+unit,'ig')) || []).map(x => x.match(new RegExp(NUMRE))[0]);
-    const vals = withUnit.length ? withUnit : shortCommas(line);
+    const vals = withUnit.length ? withUnit : strict ? [] : shortCommas(line);
     if (!vals.length) return '';
     // Mehrere Kandidaten: Position bzw. Flächenbezug entscheidet (istOnLine).
     if (l !== undefined){ const p = istOnLine(l, vals, unit); if (p) return p; }
@@ -1235,7 +1238,7 @@ function extract(text, linePos){
       const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar|Gesamtenergieeffizienz|f\s*GEE|Kohlendioxid/i.test(lines[l+1]||'');
       const v = specOnLine(scope, opt.unit, geRow, l)
              || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow, l-1) : '')
-             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1) : '');
+             || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1, opt.strictNext) : '');
       if (v!=='' && v!=='k.A.') return v;
     }
     return '';
@@ -1549,11 +1552,13 @@ function extract(text, linePos){
                || byAbbrLine(/^\s*KEB(?![\w:])/);
   // -- Strom-/Sonderbedarfe: HHSB (Wohngebäude), BSB (Nicht-Wohngebäude),
   // Befeuchtung + Beleuchtung (NWG; ETU schreibt "Beleuchtungsenerergiebedarf").
-  r.hhsb  = byGerman(/^\s*Haushaltsstrombedarf\b/i, {})
+  // strictNext: Folgezeile nur mit Einheit (ArchiPHYSIK-Anlagentechnik "Haushaltsstrombedarf" /
+  // "SB  100,0  26.730  3.722" = Anteil % | kWh/a | kg/a lieferte 100,0)
+  r.hhsb  = byGerman(/^\s*Haushaltsstrombedarf\b/i, {strictNext:true})
          || byAbbrLine(/^\s*HHSB(?![\w:])/)
          || byAbbr(/^\s*HHSB\s*$/, undefined, {tableOnly:true}) // Label allein, Wert in Folgezeile
          || byAbbrLine(/^\s*HHSB(?![\w:])/, {section:'SK'});  // GEQ-2011-Tabelle (einheitslos)
-  r.bsb   = byGerman(/^\s*Betriebsstrombedarf\b/i, {})
+  r.bsb   = byGerman(/^\s*Betriebsstrombedarf\b/i, {strictNext:true})
          || byAbbrLine(/^\s*BSB(?![\w:])/)
          || byAbbrLine(/^\s*BSB(?![\w:])/, {section:'SK'});   // GEQ-2011-Tabelle (einheitslos)
   r.befeb = byGerman(/^\s*Befeuchtungsenergiebedarf\b/i, {section:'SK'})
