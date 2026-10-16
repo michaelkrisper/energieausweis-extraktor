@@ -48,7 +48,7 @@ gemeinsam. Die `pdfToText`-Zeilenrekonstruktion ist in beiden bewusst 1:1 identi
 
 **Pipeline:** PDF → `pdfToText` rekonstruiert layouttreuen Text aus den 2D-Textpositionen von pdf.js
 (Items nach y-Position zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
-und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,w,s}]}` mit den ECHTEN
+und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, y, parts:[{x,w,s}]}` (y = Zeilen-Bucket) mit den ECHTEN
 pdf.js-Positionen. → `extract(text, linePos)` füllt pro Feld einen Wert (ohne `linePos` fallen alle
 Positions-Helfer auf reine Textlogik zurück). → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
 Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
@@ -106,6 +106,20 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   gedruckte Buchstabe (Toleranz ±0,5 % gegen Rundung an der Bandgrenze), setzt `extract()`
   `r.pruefen` und `runScan` daraus den Status `PRÜFEN · Deckblatt ≠ Tabelle`. Werte werden NIE
   überschrieben.
+- **ArchiPHYSIK-2019-Formular ohne Labels (`apLabellos()`):** ArchiPHYSIK 18–25 (IfEA, Pilz & Partner,
+  RWT plus, Heinrich, Hollabrunn …) druckt ALLE Labels des OIB-2019-Formulars als Vektorgrafik; im
+  Textlayer stehen nur Werte. Eigener Block vor `extract()`, ein Aufruf am Ende von `extract()`
+  (überschreibt die generischen Treffer, die dort nur Datenblatt/Anhang erreichen). Erkennung: Seite
+  mit ArchiPHYSIK-Fußzeile, ohne Formularlabels, mit x-gleich gestapeltem Datumspaar (Ausstellung/
+  Gültigkeit). Zuordnung nur relativ: Spalten = rechtsbündige Wertkanten, Zeilen = Rasterfolge;
+  Standortklima = 15 (WG) / 20 (NWG) Zeilen, Q-Spalte fehlt genau in eAWZ-/fGEE-Zeilen, Q/spez. =
+  BGF, PEB = n.ern. + ern.; Kenndaten über 2 von 3 Formelankern (BF = 0,8·BGF, l_c·A/V = 1,
+  A/V = A/V_B); Deckblatt = Nachbarseite mit Effizienzskala (Vösendorf heftet es HINTER Seite 2),
+  Buchstaben nach x. Was die Anker nicht bestätigen, bleibt leer. `isEnergieausweis(text, linePos)`
+  erkennt so auch reine Formularauszüge ohne ein einziges Stichwort. Belege: 10 Korpus-PDFs
+  `*_2019_*_archiphysik` (5 davon Holdout, vor dem ersten Lauf von Hand geschrieben); alle 20
+  labellosen ArchiPHYSIK-Ausweise der Reserve liegen innerhalb der ersten 8 Seiten — die
+  14-Seiten-Grenze reicht.
 - `extract()` — ein Aufruf pro Feld. Extraktions-Bausteine:
   - `byLabel(lines, labelRe, opt)` — Label-Zelle → Wert aus derselben/Nachbarzelle. `{num, unit}` für
     Zahl vor Einheit; `{up}`/`{down}` für Wert in Zeile darüber/darunter (ArchiPHYSIK splittet Label/Wert).
@@ -149,7 +163,7 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 
 Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 für WG und NWG und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
 e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (auch Mac-Mojibake,
-Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
+Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`; 18–25 mit OIB 2019 ohne Labels, `apLabellos`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
 Werte) — Baujahre 2010–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
 Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE
