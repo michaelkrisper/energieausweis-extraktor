@@ -1114,6 +1114,14 @@ function extract(text, linePos){
         const own = xAt(l, opt.abbr) !== null || !geRow;
         const pa = istRight(l, opt.abbr, opt.unit, own); if (pa) return pa;
       }
+      // Positionslogik auf der GANZEN Zeile vor jedem Zuschnitt: AX3000 druckt
+      // "Referenz-HeizwärmebedarfHWB =30,1 kWh/m²a  HWB = 40,6 kWh/m²a" mit den
+      // Subskripten "Ref,RK  entspricht  Ref,RK,zul" in der Folgezeile — der
+      // Zuschnitt ab der ersten freistehenden Abkürzung ließe nur die Grenze übrig.
+      if (pos){
+        const all = (lines[l].match(new RegExp('('+NUMRE+')\\s*'+(opt.unit||'kWh\\/m²a'),'ig')) || []).map(x => x.match(new RegExp(NUMRE))[0]);
+        if (all.length >= 2){ const p = istOnLine(l, all, opt.unit); if (p) return p; }
+      }
       let scope = lines[l];
       // GEQ-Anforderungszeile: "<dt.Label> 49,7 ...erfüllt  HWB 35,9" -> Wert nach
       // der Abkürzung ist der Bedarfswert (links steht die Anforderungsgrenze).
@@ -1173,6 +1181,10 @@ function extract(text, linePos){
     opt = opt || {}; let found = '';
     for (let l=0;l<lines.length;l++){
       if (!abbrRe.test(lines[l])) continue;
+      // Subskript auf der Zeile ODER als Anfang der Folgezeile ("HWB" / "Ref,SK
+      // 95,27 (C)", eawz) schließt die Zeile aus — eine Folgezeile, die mit einer
+      // eigenen Abkürzung beginnt ("HWB Ref,SK …"), ist kein Subskript.
+      if (opt.notSuffix && (opt.notSuffix.test(lines[l]) || new RegExp('^\\s*(?:'+opt.notSuffix.source+')','i').test(lines[l+1]||''))) continue;
       // Unter einer Klimaspalten-Überschrift entscheidet die x-Position, welcher
       // Wert Standortklima ist (ECOTECH/ETU: erste spezifisch-Spalte = REFERENZ-
       // klima!). Wert steht auf der Label-, der Folge- oder (AX3000 stellt das
@@ -1245,7 +1257,10 @@ function extract(text, linePos){
   // HWB: Hauptspalte = Heizwärmebedarf im Standortklima (realer Bedarf).
   r.hwb        = byGerman(/Heizw[äa]rmebedarf/i, {section:'SK', notSuffix:/Referenz|Ref/i})
               || byGerman(/HWB\s*\(?\s*Q/i, {})   // eawz: "HWB (Qh,a,SK)"
-              || byAbbr(/\bHWB\b(?!\*)(?!.*Ref)/i); // (?!\*): HWB* ist kWh/m³a, nicht der HWB
+              // (?!\*): HWB* ist kWh/m³a. Referenz-HWB (auch "Referenz-Heizwärmebedarf  HWB =",
+              // Subskript "Ref,RK" darunter) ist nicht der HWB — Sonstige konditionierte
+              // Gebäude führen NUR den Referenz-HWB, dort bleibt hwb leer.
+              || byAbbr(/\bHWB\b(?!\*)(?!.*Ref)/i, undefined, {notSuffix:/Ref/i});
   r.hwb_rk     = byGerman(/Heizw[äa]rmebedarf/i, {section:'RK', notSuffix:/Referenz|Ref/i})
               || byAbbr(/^\s*HWB\b(?!\*)/, undefined, {section:'RK', tableOnly:true}); // Klimaspalten-Tabelle
   r.hwb_ref_sk = byAbbrAdjacent(/HWB\s*Ref\.?,?\s*SK/i, {section:'SK'})
@@ -1354,19 +1369,41 @@ function extract(text, linePos){
   }
   if (!r.peb_nern) r.peb_nern = stackedPeb(/^\s*n\.\s*ern\b/i);
   if (!r.peb_ern)  r.peb_ern  = stackedPeb(/^\s*ern\.(?!\S)/i);
+  // AX3000 beschriftet die Zeile PEB ern. fälschlich als "Endenergiebedarf" —
+  // dann trägt nur die Abkürzung die Bedeutung: inline ("QPEBern.,SK = 46 352
+  // kWh/a  PEBern.,SK = 99,4 kWh/m²a") oder als Subskript in der Folgezeile
+  // ("Q = 2 587 kWh/a   PEB = 21,0 kWh/m²a" / "PEBern.,SK   ern.,SK"; das
+  // freistehende "ern.,SK" steht direkt rechts unter dem "PEB" des spez. Werts).
+  if (!r.peb_ern) r.peb_ern = byAbbrAdjacent(/(?<![A-Za-z])PEB\s*ern\.?\s*,\s*SK/i, {});
+  if (!r.peb_ern && pos){
+    for (let l=0; l<lines.length-1 && !r.peb_ern; l++){
+      if (!pos[l+1] || pos[l+1].page !== pos[l].page) continue;
+      const xs = xAt(l+1, /(?<![A-Za-z.])ern\.\s*,\s*SK/i); if (xs === null) continue;
+      let best = null;
+      for (const c of valsRight(l, xs - 30, new RegExp('('+NUMRE+')\\s*kWh\\/m²a'))) if (!best || c.cx < best.cx) best = c;
+      if (best) r.peb_ern = best.v;
+    }
+  }
   // -- PEB n.ern. für RH+WW(+Bel) im Referenzklima — neue Anforderungs-Kennzahl
   // der OIB 2023. GEQ stapelt das Label ("Primärenergiebedarf" / Wertzeile
   // "PEB =29,5kWh/m²a" / Subskript "HEB+BelEB,n.ern.,RK" / "n.ern. für RH+WW+Bel"),
   // daher: PEB-Wertzeile in der Nachbarschaft des Ankers suchen.
   r.peb_heb_nern_rk = (function(){
     const anchor = /n\.\s*ern\.?\s*f[üu]r\s*RH\s*\+\s*WW|HEB(?:\+BelEB)?\s*,\s*n\.\s*ern\.?\s*,\s*RK/i;
-    // ArchiPHYSIK 25 klebt das Label an ("für RH+WWPEB HEB,n.ern.,RK=  300,0") -> kein \b vor PEB
-    const vre = new RegExp('PEB\\b[^=]{0,16}=?\\s*('+NUMRE+')\\s*kWh\\/m²a','i');
+    // ArchiPHYSIK 25 klebt das Label an ("für RH+WWPEB HEB,n.ern.,RK=  300,0"),
+    // ECOTECH 2023 die Indizes an die Abkürzung ("PEBHEB,n.ern.RK =") -> kein \b
+    const vre = new RegExp('PEB[^=\\n]{0,24}=?\\s*('+NUMRE+')\\s*kWh\\/m²a','i');
+    const uv = new RegExp('^[^=]*?('+NUMRE+')\\s*kWh\\/m²a','i');
     for (let l=0;l<lines.length;l++){
       if (!anchor.test(lines[l])) continue;
       for (const c of [lines[l], lines[l-1]||'', lines[l-2]||'', lines[l+1]||'']){
         const m = c.match(vre); if (m) return cleanNum(m[1]);
       }
+      // Abkürzung und Wert auf getrennten Zeilen: ECOTECH 2023 setzt "PEBHEB,n.ern.RK ="
+      // als eigene Zeile ÜBER die Wertzeile ("Primärenergiebedarf n.ern. für RH+WW
+      // 8,3 kWh/m²a"), ArchiPHYSIK 25 den Wert UNTER "…,RK=" ("100,4kWh/m²a").
+      if (/PEB\s*HEB[^=]*=\s*$/i.test(lines[l-1]||'')){ const m = lines[l].match(uv); if (m) return cleanNum(m[1]); }
+      if (/PEB\s*HEB[^=]*=\s*$/i.test(lines[l])){ const m = (lines[l+1]||'').match(new RegExp('^\\s*('+NUMRE+')\\s*kWh\\/m²a','i')); if (m) return cleanNum(m[1]); }
     }
     return '';
   })();
@@ -1435,12 +1472,19 @@ function extract(text, linePos){
       if (mode==='label' && !isLabel) continue;
       if (mode==='stacked' && (isLabel || !/^\s*f\s+\d/.test(lines[l]) || !/^\s*GEE\b/.test(lines[l+1]||''))) continue;
       if (/:\s*Der\b/.test(lines[l])) continue;            // Erläuterungstext "fGEE: Der ..."
+      // Explizites Subskript (auf der Zeile oder gestapelt darunter) schlägt den
+      // Block: "fGEE,RK = 2,05 entspricht nicht fGEE,RK,zul = 0,75" ist RK, auch
+      // wenn sec[] es anders sieht — AX3000 druckt die SK-Überschrift nur als
+      // Grafik, der ganze Rest der Seite blieb so im RK-Block (roitham).
+      const SUBRE = /GEE\s*,\s*(RK|SK)\b(?!\s*,\s*zul)/i;
+      const sub = ((lines[l].match(SUBRE) || (/^\s*GEE\b/.test(lines[l+1]||'') ? (lines[l+1].match(SUBRE) || []) : []))[1] || '').toUpperCase();
       if (section!=='any'){
+        if (sub && sub !== section) continue;
         // Klimaspalten-Tabelle: x-Position entscheidet RK/SK (dimensionslos -> unit '')
         const pv = colValue(l, section, '');
         if (pv !== null){ if (pv !== '') return pv; continue; }
-        if (sec[l]!==section) continue;
-      }
+        if (!sub && sec[l]!==section) continue;
+      } else if (sub === 'RK') continue;                     // 'any' = Ersatz für SK
       // Label-Zeile bevorzugen; Folgezeile nur, wenn sie selbst keinen Wert hat
       // (GEQ-2023: darunter steht "Photovoltaik-Export … PVE =0,0" -> nicht greifen).
       const FGV = /(?<![\d.,])\d+,\d+(?!\d)/g;               // fGEE kann >4 sein (schlechte Bestände)
@@ -1483,6 +1527,12 @@ function extract(text, linePos){
   // ETU/Vatter-Layout: fGEE-Zeile ohne Token, nur "=  0,71  0,74" (SK  Anforderung)
   if (!r.fgee && /GESAMTENERGIEEFFIZIENZ-?FAKTOR/i.test(text)){
     for (const ln of lines){ const m = ln.match(/^\s*=\s*(\d+,\d+)\s+\d+,\d+\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
+  }
+  // Derselbe Wert genauer gedruckt? AX3000 druckt fGEE,SK im Kennwertblock nur
+  // einstellig ("0,6"), die EAVG-Bestätigungsseite zweistellig ("GEE,SK 0,59").
+  if (/^\d+\.\d$/.test(r.fgee)){
+    const m = text.match(/GEE\s*,\s*SK\s*=?\s*(\d+,\d{2,3})(?!\d)/);
+    if (m && parseFloat(cleanNum(m[1])).toFixed(1) === parseFloat(r.fgee).toFixed(1)) r.fgee = cleanNum(m[1]);
   }
   const fgeeSkLine = fgeeIn.last;
   r.fgee_rk  = fgeeIn('RK');
