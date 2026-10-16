@@ -453,7 +453,7 @@ function reText(text, re){ return (text.replace(/[ \t]+/g,' ').match(re) || [])[
 // ist kein Feld-Label — der Kleinbuchstabe+Leerzeichen davor verrät den Fließtext.
 // opt.atStart: Label muss am Zellenanfang stehen ("Straße  Kirchenweg 1" ja,
 // "Feldkirchner Straße 102" mitten im Aussteller-Text nein).
-const NEXT_LABEL = /^(?:Katastralgemeinde|Ausstellungsdatum|G[üu]ltigkeitsdatum|Unterschrift|Grundst[üu]cksn|Seeh[öo]he|KG-N|Einlagezahl|Gesch[äa]ftszahl|GWR-Zahl)/i;
+const NEXT_LABEL = /^(?:Katastralgemeinde|Ausstellungsdatum|G[üu]ltigkeitsdatum|Unterschrift|Grundst[üu]cksn|Seeh[öo]he|KG-N|Einlagezahl|Gesch[äa]ftszahl|GWR-Zahl|PLZ\b)/i;
 function byLabel(lines, labelRe, opt){
   opt = opt || {};
   const max = opt.max || 40;
@@ -582,7 +582,10 @@ function extract(text, linePos){
                  || reText(text, /(?:Richtlinie|RL)\.?\s*6\s*(?:Ausgabe:?\s*)?((?:19|20)\d{2})/i);
   r.adresse      = byLabel(lines, /^(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse)\b/i, {max:72, atStart:true})
                  || byLabel(lines, /\b(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse)\b/i, {max:72})
-                 || byLabel(lines, /\b(?:Standort|Objekt)\b/i, {max:72});
+                 // nur als Label am Zellenanfang ("Objekt   Wohnanlage Rautenweg 11"), nicht
+                 // in Überschriften ("SPEZIFISCHER STANDORT-REFERENZ-HEIZWÄRMEBEDARF"), und
+                 // nur mit Hausnummer ("Standort:Seekirchen am Wallersee" ist der Ort)
+                 || byLabel(lines, /^(?:Standort|Objekt)\b(?!-)/, {max:72, atStart:true}).replace(/^(?!.*\d).*$/, '');
   // alle "PLZ/Ort"-Treffer sammeln; bevorzuge den mit Bezirks-Bindestrich
   // (Hauptseite "1220 Wien-Donaustadt" statt Deckblatt "1220/Wien").
   {
@@ -696,7 +699,10 @@ function extract(text, linePos){
   // GEQ 2011 druckt die EA-Art labellos als eigene Deckblatt-Zeile
   // ("Sanierung - Ist-Zustand"); der ZEUS-Eingangsstempel führt "Typ: …".
   if (!r.ea_art) r.ea_art = reText(text, /^\s*((?:Sanierung|Neubau)\s*-\s*(?:Ist-?Zustand|Planung|Bestand)|Sanierungsplanung|Ist-?Zustand)\s*$/im);
-  if (!r.ea_art) r.ea_art = reText(text, /Typ:\s*(Sanierungsplanung|Sanierung(?:\s*-\s*Ist-?Zustand)?|Ist-?Zustand|Bestand|Planung|Neubau[a-zäöü]*)/i);
+  // Salzburger Stempel ohne "Typ:" ("Eingang am 13. Feb. 2023Neubauplanung")
+  if (!r.ea_art) r.ea_art = reText(text, /(?:Typ:|Eingang am [^\n]{0,20}?(?:19|20)\d{2})\s*(Sanierungsplanung|Sanierung(?:\s*-\s*Ist-?Zustand)?|Ist-?Zustand|Bestand|Planung|Neubau[a-zäöü]*)/i);
+  // GEQ 2011 hängt die Art an den Titel ("Energieausweis für Wohngebäude - Planung")
+  if (!r.ea_art) r.ea_art = reText(text, /Energieausweis\s+f[üu]r\s+[^\n]{0,40}?Geb[äa]ude\s+-\s+(Planung|Bestand|Ist-?Zustand|Neubau[a-zäöü]*|Sanierung[a-zäöü]*)\b/i);
   // "Letzte Veränderung": Wert kann Zellgrenzen überspannen ("Erweiterung 1955,
   // Zubau  1990") -> Rest der ZEILE nach dem Label nehmen, nicht nur die Zelle.
   r.letzte_veraenderung = '';
@@ -1396,7 +1402,8 @@ function extract(text, linePos){
   // Befeuchtung + Beleuchtung (NWG; ETU schreibt "Beleuchtungsenerergiebedarf").
   r.hhsb  = byGerman(/^\s*Haushaltsstrombedarf\b/i, {})
          || byAbbrLine(/^\s*HHSB(?![\w:])/)
-         || byAbbr(/^\s*HHSB\s*$/, undefined, {tableOnly:true}); // Label allein, Wert in Folgezeile
+         || byAbbr(/^\s*HHSB\s*$/, undefined, {tableOnly:true}) // Label allein, Wert in Folgezeile
+         || byAbbrLine(/^\s*HHSB(?![\w:])/, {section:'SK'});  // GEQ-2011-Tabelle (einheitslos)
   r.bsb   = byGerman(/^\s*Betriebsstrombedarf\b/i, {})
          || byAbbrLine(/^\s*BSB(?![\w:])/)
          || byAbbrLine(/^\s*BSB(?![\w:])/, {section:'SK'});   // GEQ-2011-Tabelle (einheitslos)
@@ -1461,7 +1468,10 @@ function extract(text, linePos){
   if (!/erf[üu]llt|entspricht|k\.\s*A\.|Biomasse|alternativ|Punkt|%|Solar|W[äa]rmepumpe|Fernw[äa]rme|Abw[äa]rme/i.test(r.ern_anteil)) r.ern_anteil='';
   // Verwaltungs-Nummern des ERSTELLT-Blocks; ohne Ziffer -> Fehlgriff -> leer
   r.gwr  = byLabel(lines, /GWR-?Zahl/i, {max:20});          if (!/^\d[\d.,\-\/ ]*$/.test(r.gwr)) r.gwr='';
-  r.zeus = reText(text, /ZEUS\s*Nr\.?:?\s*([\d.\-\/]{4,25})/i);
+  // "ZEUS Nr." / "ZEUS-Nr." und der OÖ-Stempel "Reg.-Nr. 45603.26.15198.02Code: …"
+  // (dort nur im ZEUS-Format KG.JJ.Nr.Lfd, damit keine andere Register-Nr. greift)
+  r.zeus = reText(text, /ZEUS[\s-]*Nr\.?:?\s*(\d[\d.\-\/]{3,24})/i).replace(/[.\-\/]+$/,'')
+        || reText(text, /Reg\.\s*-?\s*Nr\.?:?\s*(\d{2,5}\.\d{2}\.\d{3,7}\.\d{2})(?!\d)/i);
   r.gz   = byLabel(lines, /Geschäftszahl/i, {max:24});      if (!/\d/.test(r.gz)) r.gz='';
   // LEK: Wert auf der Label-Zeile (ggf. nach "T"-Subskript) ODER in der Folgezeile
   // (ECOTECH "LEK-Wert" \n "… T  177,33"). Kein Zeilenübergriff im Hauptregex.
