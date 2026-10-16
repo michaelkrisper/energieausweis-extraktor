@@ -629,8 +629,9 @@ function extract(text, linePos){
   }
   if (!/(?:18|19|20)\d{2}/.test(r.letzte_veraenderung)) r.letzte_veraenderung = '';
   r.lueftung     = byLabel(lines, /Art der L[üu]ftung/i, {max:28});
-  if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) r.lueftung = byLabel(lines, /\bL[üu]ftung\b/i, {max:28});
-  if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) // Wert steht z.T. über/neben dem Label
+  // "Mischsystem" (eawz/ArchiPHYSIK: Fenster- + mechanische Lüftung) ist ein gültiger Wert
+  if (!/l[üu]ftung|WRG|mechanisch|natürlich|Mischsystem/i.test(r.lueftung)) r.lueftung = byLabel(lines, /\bL[üu]ftung\b/i, {max:28});
+  if (!/l[üu]ftung|WRG|mechanisch|natürlich|Mischsystem/i.test(r.lueftung)) // Wert steht z.T. über/neben dem Label
     r.lueftung   = reText(text, /\b(RLT (?:mit|ohne) WRG|Fensterl[üu]ftung|kontrollierte? Wohnrauml[üu]ftung|mechanische L[üu]ftung|nat[üu]rlich(?:e L[üu]ftung)?)\b/i) || r.lueftung;
   r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²', ok:rng(5, 5e6)});
   r.bezugsflaeche= byLabel(lines, /Bezugs-?(?:fl[äa]che|Grundfl[äa]che)|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²', down:true, ok:rng(5, 5e6)});
@@ -1480,6 +1481,31 @@ function extract(text, linePos){
     r.hwb_ref_sk = ez(/HWB\s*Ref\.?,?\s*SK\s*(\d+,\d+)/i) || r.hwb_ref_sk;
     r.peb        = ez(/PEB\s*SK\s*(\d+,\d+)/i) || r.peb;
     r.co2        = ez(/CO\s*2?\s*SK\s*(\d+,\d+)/i) || r.co2;
+    // eawz 2024, Förderblock: Abkürzung + Langtext, Subskript RK mit dem Wert in
+    // der Folgezeile ("PEB  Spezifischer, jährlicher Primärenergiebedarf am fiktiven
+    // Referenzstandort (RK …" / "RK   464,07 kWh/m²a"; "CO … " / "2eq,RK" / "25,39 kg/m²a")
+    r.peb_rk = r.peb_rk || ez(/\nPEB\b[^\n]*\n\s*RK\s+(\d+,\d+)\s*kWh\/m²a/);
+    r.co2_rk = r.co2_rk || ez(/2eq\s*,\s*RK\s*\n\s*(\d+,\d+)\s*kg\/m²a/);
+    // eawz 2024, BTV-Anforderungen bei größerer Renovierung: Kopf "Soll  Ist
+    // Anforderung" -> zweiter Wert = Ist ("PEB  190,00 kwh/ma 91,34 kwh/ma erfüllt"
+    // / "RK …"; das "²" steht als Hochzahl in der Zeile darüber)
+    if (/Soll\s+Ist\s+Anforderung/.test(fg)){
+      r.peb_rk = r.peb_rk || ez(/\nPEB\s+\d+,\d+\s*kwh\/m²?a\s+(\d+,\d+)\s*kwh\/m²?a[^\n]*\n\s*RK\b/i);
+      r.co2_rk = r.co2_rk || ez(/CO2eq\s*RK\s*\d+,\d+\s*kg\/m²?a\s+(\d+,\d+)\s*kg\/m²?a/i);
+    }
+    // eawz 2024: Bereitstellungssystem je Verwendungszweck — als Tabelle "primäres
+    // System | sekundäres System" ("Warmwasser  Grundwasserwärmepumpe  nicht
+    // vorhanden") oder unter dem Balken ("Warmwasser" / "4.816  12.520 …" / "Strom-direkt")
+    const sysOf = re => {
+      for (let l=0;l<lines.length;l++){
+        const cs = cells(lines[l]); if (!cs.length || !re.test(cs[0])) continue;
+        if (cs.length >= 2) return /^[A-ZÄÖÜa-zäöü]/.test(cs[1]) && !/nicht vorhanden/i.test(cs[1]) ? cs[1] : '';
+        if (/^[\d.\s]+$/.test(lines[l+1]||'') && /[A-Za-zÄÖÜäöü]{3}/.test(lines[l+2]||'') && !/\d/.test(lines[l+2])) return lines[l+2].trim();
+      }
+      return '';
+    };
+    if (!r.ww_system) r.ww_system = sysOf(/^Warmwasser$/);
+    if (!r.rh_system) r.rh_system = sysOf(/^Raumwärme$/);
     // Klassen: Label (HWB/fGEE) und "wert (Klasse)" stehen in getrennten Zeilen
     for (let l=0;l<lines.length;l++){
       const kl = (lines[l].match(/^\s*[\d.,]+\s*(?:kWh\/m²a)?\s*\(([A-G]\+{0,2})\)\s*$/)||[])[1];

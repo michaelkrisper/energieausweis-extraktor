@@ -30,6 +30,8 @@
   "soll_innen": "20",
   "heiztage": "186",
   "photovoltaik": "0.0",
+  "ww_system": "Gasheizung, thermisch Solar",
+  "rh_system": "Gasheizung",
   "hwb": "34.7",
   "hwb_rk": "34.3",
   "hwb_ref_sk": "34.7",
