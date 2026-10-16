@@ -678,6 +678,8 @@ function extract(text, linePos){
   }
   r.solarthermie = afterLabelNum(/Solarthermie/i, 'm²');
   r.photovoltaik = afterLabelNum(/Photovoltaik(?!-?\s*Export)/i, 'kWp');
+  // GEQ "Photovoltaik -65kWp; Multikristallines Silicium": der Strich ist Trenner
+  for (const k of ['solarthermie','photovoltaik']) r[k] = r[k].replace(/^-(?=\d)/, '');
   if (!r.photovoltaik){
     // GEQ 2011 stellt die kWp-Angabe in die Zeile ÜBER das Label
     // ("19,5kWp; Monokristallines Silicium" / "Photovoltaik -")
@@ -1144,7 +1146,9 @@ function extract(text, linePos){
       if (new RegExp('-\\s*'+(opt.unit||'kWh\\/m²a'),'i').test(scope)) continue;
       // ArchiPHYSIK stellt den Wert z.T. in die Zeile ÜBER das Label.
       // Folgezeile nur nutzen, wenn sie nicht selbst eine andere Kennzahl ist.
-      const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar/i.test(lines[l+1]||'');
+      // (AX3000 roitham: EEB RK nur im Bild, darunter "Gesamtenergieeffizienz-Faktor
+      // fGEE,RK = 2,05" — dessen Wert ist kein EEB)
+      const nextOk = !/Energieaufwandszahl|Haushaltsstrom|Photovoltaik|Erneuerbar|Gesamtenergieeffizienz|f\s*GEE|Kohlendioxid/i.test(lines[l+1]||'');
       const v = specOnLine(scope, opt.unit, geRow, l)
              || (opt.up ? specOnLine(lines[l-1]||'', opt.unit, geRow, l-1) : '')
              || (nextOk ? specOnLine(lines[l+1]||'', opt.unit, geRow, l+1) : '');
@@ -1405,9 +1409,13 @@ function extract(text, linePos){
           || byAbbr(/\bEEB\b(?!.*RK)/i);
   r.eeb_rk = byGerman(/Endenergiebedarf/i, {section:'RK', notSuffix:/Referenz|Lieferenergie/i, abbr:/\bEEB\b/})
           || byGerman(/^\s*End-?\s*\/\s*Lieferenergiebedarf/i, {section:'RK', abbr:/\bE\s*\/\s*LEB/});
-  r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK'})
-          || byGerman(/Prim[äa]renergiebedarf\b/i, {})
-          || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i);
+  // RK-Zeilen sind nie der PEB SK: eawz 2024 "PEB  Spezifischer … Primärenergiebedarf
+  // am fiktiven Referenzstandort (RK …" / "RK  464,07 kWh/m²a" und die BTV-Zeile
+  // "PEB  190,00 kwh/ma 91,34 kwh/ma" / "RK …" (Soll | Ist im Referenzklima)
+  const NOT_RK = /\bRK(?![A-Za-z])|\bRef/;
+  r.peb    = byGerman(/Prim[äa]renergiebedarf(?!\s+(?:nicht|erneuerbar))/i, {section:'SK', notSuffix:NOT_RK})
+          || byGerman(/Prim[äa]renergiebedarf\b/i, {notSuffix:NOT_RK})
+          || byAbbr(/\bPEB\b(?!\s*(?:n\.?ern|ern))/i, undefined, {notSuffix:NOT_RK});
   // OIB-2015+-Anforderungsblock im Referenzklima: PEB und CO2eq gibt es dort als
   // eigene RK-Kennzahl ("Primärenergiebedarf   PEB RK   169,1 kWh/m²a",
   // ECOTECH/BuildDesk) — sie vervollständigen den RK-Satz neben HWB/EEB/fGEE RK.
@@ -1418,8 +1426,8 @@ function extract(text, linePos){
   r.peb_nern_rk = byAbbrAdjacent(/PEB[-\s,]*n\.?\s*ern\.?[\s,]*RK\b/i, {});
   r.peb_ern_rk  = byAbbrAdjacent(/\bPEB[-\s,]*ern\.?[\s,]*RK\b/i, {});
   r.co2    = byGerman(/(?:CO2-?Emissionen|Kohlendioxidemissionen|äquivalente Kohlendioxid)/i, {unit:'kg\\/m²a'})
-          || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a')
-          || byAbbr(/\bCO[2,]/i, 'kg\\/m²a')    // OCR: "CO," statt "CO2"
+          || byAbbr(/\bCO2(?:eq)?\b/i, 'kg\\/m²a', {notSuffix:NOT_RK})   // "CO2eq RK28,00 kg/ma 12,72" (eawz BTV)
+          || byAbbr(/\bCO[2,]/i, 'kg\\/m²a', {notSuffix:NOT_RK})    // OCR: "CO," statt "CO2"
           || byAbbr(/^\s*CO\s*$/, 'kg\\/m²a');  // ECOTECH stapelt: "CO" / "2  41.155 kg/a  52,8 kg/m²a"
   r.co2_rk = byAbbrAdjacent(/\bCO2(?:eq)?[\s,]*RK\b/i, {unit:'kg\\/m²a'});
   // Wert NUR auf der Abkürzungszeile selbst (Vorarlberg-Stapellayout: Nachbar-

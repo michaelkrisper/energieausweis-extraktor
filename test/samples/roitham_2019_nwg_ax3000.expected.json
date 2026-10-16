@@ -22,6 +22,7 @@
   "heizgradtage": "3746",
   "heiztage": "365",
   "rh_system": "Erdgas",
+  "eeb_rk": "",
   "fgee_rk": "2.05",
   "hwb_klasse": "E",
   "eawz_ww": "1.29",

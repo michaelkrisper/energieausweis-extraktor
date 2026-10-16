@@ -28,6 +28,7 @@
   "norm_aussen": "-13.5",
   "soll_innen": "20",
   "heiztage": "208",
+  "photovoltaik": "65",
   "hwb": "28.3",
   "hwb_rk": "24.4",
   "hwb_ref_sk": "28.3",
