@@ -598,6 +598,9 @@ function extract(text, linePos){
         // PLZ und Ort stehen evtl. in getrennten Zellen -> Folgezellen anhängen
         for (let j=i+1; j<cs.length && j<=i+2; j++){
           if (/KG-?N|Einlage|Seeh|Grundst|Katastr/i.test(cs[j])) break;
+          // "4810/Gmunden" ist schon vollständig (sonst hängt die Nachbarzelle an:
+          // IfEA-Deckblatt "PLZ/Ort:  4810/Gmunden  Christoph Bernegger")
+          if (/\d{4}[\s\/]+[A-Za-zÄÖÜäöü]/.test(v)) break;
           v = (v+' '+cs[j]).trim();
           if (/\d{4}\s+\D/.test(v)) break;
         }
