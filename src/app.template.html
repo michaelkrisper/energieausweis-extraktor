@@ -1612,9 +1612,11 @@ function extract(text, linePos){
       }
       if (cols.hwb === undefined) continue;
       // Buchstaben stehen in den Folgezeilen, jeder auf x seiner Spalte. Schluss
-      // bei der ersten Zeile mit Fließtext (die Legende unter dem Slider).
+      // bei der ersten Zeile mit Fließtext (die Legende unter dem Slider). ETU/GEQ
+      // stapeln die Pfeil-Buchstaben auf der Höhe ihrer Skalenstufe (goeming: A++
+      // bis G = 13 Zeilen, je Zeile ein Buchstabe) -> Fenster über die ganze Skala.
       const out = {};
-      for (let j=l+1; j<=l+8 && j<pos.length; j++){
+      for (let j=l+1; j<=l+20 && j<pos.length && pos[j].page === pos[l].page; j++){
         const ps = pos[j].parts.filter(p=>p.s.trim());
         if (!ps.length) continue;
         if (ps.some(p=>p.s.trim().length > 4 && !TOK.test(p.s.trim()))) break;
