@@ -29,7 +29,7 @@ const tpl = fs.readFileSync(
 eval(tpl.slice(tpl.indexOf("const NUM_KEYS"), tpl.indexOf("// ---- State")));
 
 // pdfToText 1:1 wie im Template (Zeilen-Rekonstruktion aus 2D-Positionen)
-async function pdfToText(buf) {
+async function pdfToText(buf, tweak) {
 	const task = pdfjsLib.getDocument({
 		data: buf,
 		useWorkerFetch: false,
@@ -42,7 +42,7 @@ async function pdfToText(buf) {
 	for (let p = 1; p <= Math.min(pages, 14); p++) {
 		const tc = await (await doc.getPage(p)).getTextContent();
 		const lm = new Map();
-		for (const it of tc.items) {
+		for (const it of tweak ? tweak(tc.items, p) : tc.items) {
 			if (!it.str || !it.transform) continue;
 			const k = Math.round(it.transform[5] / 2) * 2;
 			if (!lm.has(k)) lm.set(k, []);
@@ -121,6 +121,53 @@ function classify(expected, got) {
 	return res;
 }
 
+// ---- Jitter (metamorpher Robustheitstest) ---------------------------------
+// --jitter[=N]: jedes PDF zusätzlich N-mal (Default 3) mit deterministisch
+// verschobenen pdf.js-Items lesen (Seed = Lauf + Dateiname): x ±JX, y ±JY je Item,
+// dazu zufällige Nachbartausche in der Item-Reihenfolge. Das Ergebnis muss Feld
+// für Feld dem unverschobenen Lauf gleichen — sonst hängt eine Regel an einem
+// brüchigen Schwellwert (y-Bucket, Spaltenlücke, Fensterbreite). Der Hook sitzt
+// in pdfToText (tweak), die Zeilenrekonstruktion selbst bleibt 1:1 wie im Template.
+const JX = Number(process.env.JX || 1);
+const JY = Number(process.env.JY || 1);
+function mulberry32(a) {
+	return () => {
+		a = (a + 0x6d2b79f5) | 0;
+		let t = Math.imul(a ^ (a >>> 15), 1 | a);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+function hashStr(s) {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+	return h >>> 0;
+}
+const JMODE = process.env.JMODE || "page";
+function jitterTweak(seed, name) {
+	const rnd = mulberry32(hashStr(name) ^ Math.imul(seed, 0x9e3779b1));
+	const amp = (a) => (rnd() < 0.5 ? -1 : 1) * a * (0.5 + 0.5 * rnd()); // ±0,5a…a
+	return (items) => {
+		const px = amp(JX), py = amp(JY);
+		const out = items.map((it) => {
+			if (!it.transform) return it;
+			const t = it.transform.slice();
+			if (JMODE === "page") { t[4] += px; t[5] += py; }
+			else { t[4] += (rnd() * 2 - 1) * JX; t[5] += (rnd() * 2 - 1) * JY; }
+			return { ...it, transform: t };
+		});
+		for (let i = out.length - 1; i > 0; i--)
+			if (rnd() < 0.3) [out[i], out[i - 1]] = [out[i - 1], out[i]];
+		return out;
+	};
+}
+function diffFields(a, b) {
+	const out = [];
+	for (const k of new Set([...Object.keys(a), ...Object.keys(b)]))
+		if (!eq(a[k] || "", b[k] || "")) out.push(`${k}: ${a[k] || "·"} -> ${b[k] || "·"}`);
+	return out;
+}
+
 function loadBaseline(p) {
 	try {
 		return JSON.parse(fs.readFileSync(p, "utf8"));
@@ -133,6 +180,9 @@ function loadBaseline(p) {
 	await initPdfjs();
 	const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 	const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith("--")));
+	const jflag = [...flags].find((a) => /^--jitter(?:=\d+)?$/.test(a));
+	const jitterRuns = jflag ? Number(jflag.split("=")[1] || 3) : 0;
+	let jitterDiffs = 0;
 	const dir = args[0] || path.join(__dirname, "samples");
 	const baselinePath = path.join(__dirname, "baseline.json");
 	if (!fs.existsSync(dir)) {
@@ -179,6 +229,13 @@ function loadBaseline(p) {
 		}
 		const r = extract(text, linePos);
 		const expPath = path.join(dir, `${f.replace(/\.pdf$/i, "")}.expected.json`);
+		const jit = [];
+		for (let s = 1; s <= jitterRuns; s++) {
+			const j = await pdfToText(new Uint8Array(fs.readFileSync(path.join(dir, f))), jitterTweak(s, f));
+			const d = diffFields(r, extract(j.text, j.linePos));
+			if (d.length) jit.push(`      JITTER seed ${s}: ${d.join("; ")}`);
+		}
+		jitterDiffs += jit.length;
 
 		if (fs.existsSync(expPath)) {
 			anyAssert = true;
@@ -204,9 +261,15 @@ function loadBaseline(p) {
 					`hwb=${r.hwb || "·"} fgee=${r.fgee || "·"} ausgabe="${r.ausgabe || "·"}" ${r.plz_ort || ""}`,
 			);
 		}
+		for (const x of jit) console.log(x);
 	}
 
-	if (!anyAssert) return; // reiner Coverage-Lauf, kein Soll/Ist
+	if (jitterRuns)
+		console.log(
+			`\nJITTER  ${jitterRuns} Läufe je PDF (x ±${JX}, y ±${JY}): ` +
+				(jitterDiffs ? `${jitterDiffs} Läufe mit abweichendem Ergebnis` : "alle Ergebnisse stabil"),
+		);
+	if (!anyAssert) process.exit(jitterDiffs ? 1 : 0); // reiner Coverage-Lauf, kein Soll/Ist
 
 	console.log(
 		`\nGESAMT  ${totPass} PASS  ${totFail} FAIL  ${totMiss} MISS  ` +
@@ -235,5 +298,5 @@ function loadBaseline(p) {
 
 	// MISS zählt wie FAIL: ein Soll-Feld, das gar nicht mehr extrahiert wird, ist
 	// dieselbe Regression wie ein falscher Wert — sonst wäre das CI-Gate blind dafür.
-	process.exit(totFail > 0 || totMiss > 0 ? 1 : 0);
+	process.exit(totFail > 0 || totMiss > 0 || jitterDiffs > 0 ? 1 : 0);
 })();

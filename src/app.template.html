@@ -2163,7 +2163,9 @@ async function* walk(dirHandle, prefix='', inEnergie=false){
 // Spaltenlücken als Doppel-Leerzeichen -> die Zellen-Logik kann Label/Wert trennen.
 // Zusätzlich linePos: 1:1 zu den Textzeilen {page, parts:[{x,y,w,s}]} mit den ECHTEN
 // pdf.js-Positionen/-Breiten -> extract() kann Tabellenspalten per x zuordnen.
-async function pdfToText(file){
+// tweak (optional): Hook für den Jitter-Test in test/validate.js (verschiebt die
+// pdf.js-Items vor der Zeilenbildung); im Browser nie gesetzt.
+async function pdfToText(file, tweak){
   const buf = await file.arrayBuffer();
   const task = pdfjsLib.getDocument({data:buf, useWorkerFetch:false, isEvalSupported:false});
   const doc = await task.promise;
@@ -2175,7 +2177,7 @@ async function pdfToText(file){
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
     const linesMap = new Map();
-    for (const it of tc.items){
+    for (const it of (tweak ? tweak(tc.items, p) : tc.items)){
       if (!it.str || !it.transform) continue;
       const key = Math.round(it.transform[5]/2)*2;      // y auf 2px-Raster
       if (!linesMap.has(key)) linesMap.set(key, []);
