@@ -35,8 +35,10 @@ jobs:
       - run: npm install
       # die Korpus-PDFs liegen nicht im Repo, nur ihre URLs (_quelle in den Fixtures)
       - run: node test/fetch.js
-      - name: Engine gegen Referenz-Korpus validieren
-        run: node test/validate.js test/samples
+      # --jitter: jedes PDF zusätzlich 3x mit versetzter Seite / gemischter Item-
+      # Reihenfolge lesen; das Ergebnis muss identisch bleiben (Robustheits-Gate)
+      - name: Engine gegen Referenz-Korpus validieren (inkl. Jitter-Test)
+        run: node test/validate.js test/samples --jitter
 
   deploy:
     needs: test

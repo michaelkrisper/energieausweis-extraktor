@@ -1,8 +1,8 @@
 {
   "_quelle": "https://www.proholz.at/fileadmin/proholz.noe.hbp/media/hbp2025/22272/ea.pdf",
   "_sha256": "967a6e3e2f1bcd6be26142fcdde64e35d4b0bb5339e3758b216e80a1f3d59911",
-  "_ausgabe": "OIB RL6 Ausgabe April 2019 (ArchiPHYSIK/Mac) — Nichtwohngebäude Bildungseinrichtung",
-  "_layout": "MacRoman-Mojibake (ƒ=Ä ‰=ä ≤=² fl=ß), 'entspricht'-fGEE, PVE mit Wert",
+  "_ausgabe": "OIB RL6 Ausgabe April 2019 (ECOTECH 3.3.1679 / BuildDesk, gedruckt über PDF24 Creator / GPL Ghostscript 10.02.1) — Nichtwohngebäude Bildungseinrichtung",
+  "_layout": "MacRoman-Mojibake (ƒ=Ä ‰=ä ≤=² fl=ß) durch den Ghostscript-Druckpfad (nicht Mac/ArchiPHYSIK), 'entspricht'-fGEE, PVE mit Wert",
   "ausgabe": "April 2019",
   "adresse": "Etzen 76",
   "plz_ort": "3920 Etzen",
@@ -19,6 +19,7 @@
   "char_laenge": "1.74",
   "kompaktheit": "0.57",
   "u_mittel": "0.19",
+  "lek": "15.23",
   "bauweise": "leicht",
   "klimaregion": "N",
   "seehoehe": "708.00",

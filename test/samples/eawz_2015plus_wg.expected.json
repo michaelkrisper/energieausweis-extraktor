@@ -24,6 +24,8 @@
   "heizgradtage": "3456",
   "norm_aussen": "-10",
   "heiztage": "200",
+  "ww_system": "Pellets, thermisch Solar",
+  "rh_system": "Pellets",
   "hwb": "31.5",
   "hwb_rk": "31.3",
   "hwb_ref_sk": "31.5",
