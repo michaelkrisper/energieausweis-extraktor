@@ -83,7 +83,7 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die
   Grenze. `istRight()` löst das über eine zeichengenaue x-Karte der Zeile (`xmap`, gleiche Rekonstruktion
   wie `pdfToText`, damit auch Treffer über mehrere pdf.js-Items wie „HWB " + „Ref,SK" verortbar sind) und
-  bezieht die direkten Nachbarzeilen derselben Seite mit ein (die x-Karte repariert Mac-Mojibake
+  bezieht die direkten Nachbarzeilen derselben Seite mit ein (die x-Karte repariert Mojibake
   zeichenweise mit, sonst wäre „kWh/m≤a" nie als Einheit lesbar) — der y-Bucket zerlegt eine Tabellenzeile oft
   in zwei Textzeilen (Wert oben, Abkürzung darunter). Die Zeile der Abkürzung gewinnt immer zuerst;
   Nachbarzeilen gehören sonst zur NÄCHSTEN Kennzahl (`ownRow`-Flag schaltet sie ganz ab). `dropLimits()`
@@ -135,9 +135,10 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
     unsicheren Vorarlberg-Stapelspalten mit den sauberen Inserat-Kennzahlen.
 - `isEnergieausweis(text)` — Punkte-Schwelle (≥2); darunter wird die Datei übersprungen (in ENERGIE-
   Ordnern liegen auch fremde PDFs).
-- **Mojibake-Reparatur:** Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
-  (`ƒ`=Ä, `‰`=ä, `≤`=², `∞`=°). `extract()` erkennt das (≥3ד‰/¸/ˆ vor Kleinbuchstabe") und mappt
-  per fester Tabelle zurück; ß→fl-Ligatur wird von pdf.js zu ASCII „fl" normalisiert und ist nur
+- **Mojibake-Reparatur:** PDFs aus einem Ghostscript-Druckpfad (PDF24 Creator; Beleg `proholz_2019_nwg`:
+  ECOTECH 3.3.1679, Producer „GPL Ghostscript 10.02.1") liefern Latin-1-Bytes MacRoman-dekodiert
+  (`ƒ`=Ä, `‰`=ä, `≤`=², `∞`=°) — kein Mac-/ArchiPHYSIK-Merkmal, die ArchiPHYSIK-PDFs des Korpus sind
+  sauber. `extract()` erkennt das (≥3ד‰/¸/ˆ vor Kleinbuchstabe") und mappt per fester Tabelle zurück; ß→fl-Ligatur wird von pdf.js zu ASCII „fl" normalisiert und ist nur
   wortweise reparierbar (`Strafle`→`Straße`, `Auflen`→`Außen`).
 - `cleanNum()` — normalisiert österreichische Dezimalkommas (`45,6`→`45.6`) und Tausenderpunkte.
   `NUM_KEYS` = Spalten, die als echte Zahl ins Excel gehen.
@@ -148,8 +149,7 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
 ## Neues Aussteller-Format ergänzen
 
 Geprüft gegen GEQ (inkl. Ausgabe Mai 2023 für WG und NWG und ZEUS-Kärnten-2011-NWG-Spaltentabellen), eawz, ILS ZT,
-e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (auch Mac-Mojibake,
-Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019), AX3000/Allplan (H-5055-Layout, gestapelte
+e-s-e, FIBY ZT, klimafonds, ETU/ZEUS Tirol (inkl. Gebäudeprofi Duo 7.2), ArchiPHYSIK (Version 16/17/25 — 25 stellt die Deckblattwerte ÜBER die Labelzeile, `numAboveLabel`), MA 39 Wien, ECOTECH/BuildDesk (2011/2015/2019, auch Ghostscript-Mojibake), AX3000/Allplan (H-5055-Layout, gestapelte
 Werte) — Baujahre 2010–2025, drei Layout-Familien: klassische Tabellen (inkl. LEK), Klimaspalten-
 Tabellen mit Unterzeile (positionsbasiert) und OIB-2015+-Kennwertblöcke. OIB 2023 kennt neben WG/NWG die dritte Kategorie
 „Sonstige konditionierte Gebäude" — solche Ausweise führen NUR HWB_Ref (SK/RK) + KB*; EEB/PEB/fGEE

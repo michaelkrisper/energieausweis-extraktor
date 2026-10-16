@@ -533,9 +533,9 @@ function isEnergieausweis(text){
 }
 
 function extract(text, linePos){
-  // Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
-  // ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor Kleinbuchstaben kommt in echtem Text nicht
-  // vor -> ab 3 Treffern die feste Tabelle zurückmappen (auch ²/³/°/ß betroffen).
+  // PDFs aus einem Ghostscript-Druckpfad (PDF24; proholz: ECOTECH) liefern z.T.
+  // Latin-1-Bytes MacRoman-dekodiert ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor
+  // Kleinbuchstaben kommt in echtem Text nicht vor -> ab 3 Treffern die feste Tabelle zurückmappen (auch ²/³/°/ß betroffen).
   const MOJI = {'ƒ':'Ä','‰':'ä','ˆ':'ö','¸':'ü','‹':'Ü','÷':'Ö','ﬂ':'ß','≤':'²','≥':'³','∞':'°'};
   const moji = (text.match(/[‰¸ˆ][a-zäöü]/g)||[]).length >= 3;
   if (moji){
@@ -935,7 +935,7 @@ function extract(text, linePos){
       if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); }
       const cw = p.s.length ? (p.w || p.s.length*5) / p.s.length : 5;
       // Mojibake zeichenweise wie im Text reparieren (längentreu, damit cx stimmt) —
-      // sonst findet die x-Karte "kWh/m≤a" nie als kWh/m²a (proholz, ArchiPHYSIK).
+      // sonst findet die x-Karte "kWh/m≤a" nie als kWh/m²a (proholz).
       for (let i=0;i<p.s.length;i++){ s += moji ? (MOJI[p.s[i]] || p.s[i]) : p.s[i]; cx.push(p.x + (i+0.5)*cw); }
       lastX = p.x + p.s.length*5;
     }
