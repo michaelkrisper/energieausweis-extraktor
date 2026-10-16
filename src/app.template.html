@@ -373,6 +373,12 @@ const NEXT_LABEL = /^(?:Katastralgemeinde|Ausstellungsdatum|G[üu]ltigkeitsdatum
 function byLabel(lines, labelRe, opt){
   opt = opt || {};
   const max = opt.max || 40;
+  // Zahl mit Einheit schlägt Zahl ohne: erst alle Treffer einheitsstrikt, dann
+  // erst einheitslos (ArchiPHYSIK-Inhaltsverzeichnis "… Brutto-Grundfläche und
+  // -volumen Projekt  18" steht VOR "Brutto-Grundfläche (BGF)1.978,6m²").
+  // opt.ok: Plausibilitätsbereich — ein Wert außerhalb ist ein Fehlgriff.
+  const okv = v => v !== '' && (!opt.ok || opt.ok(parseFloat(v)));
+  for (const strict of (opt.num && opt.unit ? [true, false] : [false]))
   for (let l=0; l<lines.length; l++){
     const raw = lines[l];
     const cs = cells(raw);
@@ -386,18 +392,27 @@ function byLabel(lines, labelRe, opt){
       if (mm.index > 0 && /[a-zäöüß]{3}[,.]?\s*$/.test(cs[i].slice(0, mm.index))) continue;
       const rest = cs[i].slice(mm.index+mm[0].length).replace(/^[\s:|=()]+/,'').replace(/^[.\-]+(?=\D)/,'').trim();
       if (opt.num){
-        const search = (rest+'  '+(cs[i+1]||'')+'  '+(cs[i+2]||'')+'  '+(cs[i+3]||'')+'  '+(cs[i+4]||'')).trim();
-        if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (u!=='') return u; }
-        const n = firstNum(rest) || firstNum(cs[i+1]) || firstNum(cs[i+2]); if (n!=='') return n;
+        // Wertzellen nur bis zur nächsten LABEL-Zelle: eawz 2024 setzt den Wert
+        // unter das Label ("Kompaktheit A/V  Soll-Innentemperatur  22,0 °C") —
+        // sonst würde der Wert des Nachbarfelds gegriffen.
+        const nx = [];
+        for (let j=i+1; j<=i+4 && j<cs.length && !/^[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]{3,}/.test(cs[j]); j++) nx.push(cs[j]);
+        const search = [rest].concat(nx).join('  ').trim();
+        if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (okv(u)) return u; }
+        // einheitslos nur im zweiten Durchgang und nicht nach Prosa/Inhaltsverzeichnis
+        // (kleingeschriebenes Wort direkt hinter dem Label)
+        if (!strict && !/^[a-zäöüß]{3,}\s/.test(rest)){
+          const n = firstNum(rest) || firstNum(nx[0]||'') || firstNum(nx[1]||''); if (okv(n)) return n;
+        }
         // GEQ stellt manche Werte in die Zeile ÜBER das Label
         if (opt.up && lines[l-1]){
           const u2 = opt.unit ? numBeforeUnit(lines[l-1], opt.unit) : firstNum(lines[l-1]);
-          if (u2!=='') return u2;
+          if (okv(u2)) return u2;
         }
         // ArchiPHYSIK 25 stellt manche Werte in die Folgezeile (mit Einheit)
         if (opt.down && lines[l+1]){
           const u3 = opt.unit ? numBeforeUnit(lines[l+1], opt.unit) : firstNum(lines[l+1]);
-          if (u3!=='') return u3;
+          if (okv(u3)) return u3;
         }
         continue;
       }
@@ -545,7 +560,7 @@ function extract(text, linePos){
       if (/\d/.test(c0) && /^[.\d]/.test(c0) && !/m²|m³|kWh|kg\b/i.test(c0)){ r.gstnr = c0.slice(0,40); break; }
     }
   }
-  r.einlagezahl  = byLabel(lines, /Einlagezahl\b|\bEZ\b/i, {max:14});
+  r.einlagezahl  = byLabel(lines, /Einlagezahl(?![a-zäöü])|\bEZ\b/i, {max:14});   // auch geklebt "Einlagezahl361"
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp|Geb[äa]udeart/i, {max:60})
                      .replace(/\s*(Letzte Ver[äa]nderung|Baujahr|Letzte Ver|Erbaut).*$/i,'').trim();
@@ -582,7 +597,11 @@ function extract(text, linePos){
       : /B[üu]ro|Bildung|Schul|Kindergart|Krankenh|Pflegeh|Pension|Hotel|Gastst|Veranstaltung|Sportst|Verkaufsst|Hallenbad|Mehrzweck|Nicht-?\s*Wohn/i.test(np) ? 'Nichtwohngebäude'
       : '';
   }
-  r.baujahr      = byLabel(lines, /Baujahr|Errichtungsjahr|Erbaut/i, {num:true})
+  // Plausibilitätsbereiche der Gebäudedaten: ein Wert außerhalb ist ein Fehlgriff
+  // (Nachbarfeld, Fußnote, Label-Ziffer) -> nächster Treffer bzw. leer.
+  const rng = (a, b) => n => n >= a && n <= b;
+  // "Baujahr vor 1978" / "Baujahr ab 1985" = Baujahrsklasse eines Kessels (Anhang)
+  r.baujahr      = byLabel(lines, /Baujahr(?!\s+(?:vor|von|bis|ab|nach)\b)|Errichtungsjahr|Erbaut/i, {num:true, ok:rng(1000, 2100)})
                  // "Baujahr von 1988 bis 1993" = Baujahrsklasse des Kessels (Anhang), nicht des Gebäudes
                  || reText(text, /(?:Baujahr|Errichtungsjahr|Erbaut)(?!\s+von\s)\D{0,8}((?:18|19|20)\d{2})/i);
   // EA-Art/Umsetzungsstand + Letzte Veränderung (Deckblatt OIB 2015+). Nur
@@ -607,25 +626,26 @@ function extract(text, linePos){
   if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) r.lueftung = byLabel(lines, /\bL[üu]ftung\b/i, {max:28});
   if (!/l[üu]ftung|WRG|mechanisch|natürlich/i.test(r.lueftung)) // Wert steht z.T. über/neben dem Label
     r.lueftung   = reText(text, /\b(RLT (?:mit|ohne) WRG|Fensterl[üu]ftung|kontrollierte? Wohnrauml[üu]ftung|mechanische L[üu]ftung|nat[üu]rlich(?:e L[üu]ftung)?)\b/i) || r.lueftung;
-  r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²'});
-  r.bezugsflaeche= byLabel(lines, /Bezugs-?(?:fl[äa]che|Grundfl[äa]che)|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²', down:true});
-  r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto[- ]?Volumen/i, {num:true, unit:'m³', down:true});
-  r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m', up:true, down:true});
-  r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true, unit:'1\\/m'});
-  r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true, unit:'W\\/m', down:true})
+  r.bgf          = byLabel(lines, /Brutto-?Grundfl[äa]che/i, {num:true, unit:'m²', ok:rng(5, 5e6)});
+  r.bezugsflaeche= byLabel(lines, /Bezugs-?(?:fl[äa]che|Grundfl[äa]che)|konditionierte?\s+(?:Brutto-?Grundfl[äa]che|Fl[äa]che)/i, {num:true, unit:'m²', down:true, ok:rng(5, 5e6)});
+  r.bruttovolumen= byLabel(lines, /(?:beheiztes\s+)?Brutto[- ]?Volumen/i, {num:true, unit:'m³', down:true, ok:rng(10, 5e7)});
+  r.char_laenge  = byLabel(lines, /charakteristische\s+L[äa]nge/i, {num:true, unit:'m', up:true, down:true, ok:rng(0.2, 40)});
+  r.kompaktheit  = byLabel(lines, /Kompaktheit/i, {num:true, unit:'1\\/m', ok:rng(0.02, 3)});
+  r.u_mittel     = byLabel(lines, /mittlerer\s+U-?Wert/i, {num:true, unit:'W\\/m', down:true, ok:rng(0.03, 6)})
                 || numAboveLabel(/mittlerer\s+U-?Wert/i);
   r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:24})
                    .replace(/\s*(mittlerer|Bauweise|Heiztage|Heizgradtage|Norm|Art der|Soll-|Photovoltaik|Solarthermie|Stromspeicher|EA-?Art|LEK).*$/i,'').trim();
-  r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m'}) || numAboveLabel(/Seeh[öo]he/i);
-  r.heizgradtage = byLabel(lines, /Heizgradtage/i, {num:true, unit:'K'});
-  r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C', down:true});
+  r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m', ok:rng(100, 4000)}) || numAboveLabel(/Seeh[öo]he/i);
+  // "Heizgradtage 14/22  3946" (eawz): Heizgrenze/Innentemperatur gehören zum Label
+  r.heizgradtage = byLabel(lines, /Heizgradtage(?:\s*\d{2}\s*\/\s*\d{2}(?!\d))?/i, {num:true, unit:'K', ok:rng(1000, 9000)});
+  r.norm_aussen  = byLabel(lines, /Norm-?Au[sß]+entemperatur/i, {num:true, unit:'°C', down:true, ok:rng(-40, 40)});
   // Norm-Außentemperatur ist in Österreich immer negativ — ein positiver Wert
   // ist ein Fehlgriff (AX3000: Wert steht x-ausgerichtet in der Zeile darüber).
   if (r.norm_aussen === '' || parseFloat(r.norm_aussen) > 0)
     r.norm_aussen = numAboveLabel(/Norm-?Au[sß]+entemperatur/i) || (parseFloat(r.norm_aussen) > 0 ? '' : r.norm_aussen);
-  r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d'});
-  r.huellflaeche = byLabel(lines, /Geb[äa]ude-?H[üu]llfl[äa]che/i, {num:true, unit:'m²'});
-  r.soll_innen   = byLabel(lines, /Soll-?Innentemperatur/i, {num:true, unit:'°C'});
+  r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d', ok:rng(0, 366)});
+  r.huellflaeche = byLabel(lines, /Geb[äa]ude-?H[üu]llfl[äa]che/i, {num:true, unit:'m²', ok:rng(5, 5e6)});
+  r.soll_innen   = byLabel(lines, /Soll-?Innentemperatur/i, {num:true, unit:'°C', ok:rng(5, 35)});
   // Bauweise: Wert direkt nach dem Label ("Bauweise  schwer") oder adjektivisch
   // im Fließtext ("schwere Bauweise", ältere Layouts) — nur bekannte Klassen.
   r.bauweise     = reText(text, /Bauweise\s*[: ]\s*((?:sehr\s+)?(?:mittelschwer|leicht|mittel|schwer))/i)
@@ -654,8 +674,11 @@ function extract(text, linePos){
         const v = numBeforeUnit(lines[l-1], 'kWp'); if (v!==''){ r.photovoltaik = v; break; }
       }
   }
+  // ETU-Datenblatt "Peakleistung: 74,7 kWp", eawz 2015 "Leistung PV" / "0,0 kWp"
+  if (!r.photovoltaik) r.photovoltaik = byLabel(lines, /Peakleistung|^Leistung PV\b/i, {num:true, unit:'kWp', down:true});
   r.stromspeicher= afterLabelNum(/Stromspeicher/i, 'kWh(?!\/)');
-  r.heizlast     = byLabel(lines, /Geb[äa]ude-?Heizlast/i, {num:true, unit:'kW(?![hp])'});
+  // auch ohne "Gebäude-" (Salzburger Prüfbericht "Heizlast  53,7 kW")
+  r.heizlast     = byLabel(lines, /(?:Geb[äa]ude-?)?Heizlast/i, {num:true, unit:'kW(?![hp])'});
   // -- Energie-Kennzahlen --------------------------------------------------
   // GEQ-Layout trennt Referenzklima (RK) und Standortklima (SK) in Blöcke und
   // hängt die Index-Suffixe (SK / RK / Ref,SK) z.T. in die Folgezeile. Wir
@@ -854,16 +877,17 @@ function extract(text, linePos){
   function xmap(l){
     if (!pos || !pos[l]) return null;
     if (XMAP[l] !== undefined) return XMAP[l];
-    let s = '', lastX = null; const cx = [];
+    let s = '', lastX = null; const cx = [], cy = [];
     for (const p of pos[l].parts){
-      if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); }
+      if (lastX !== null && p.x - lastX > 14){ s += '  '; cx.push(lastX, lastX); cy.push(p.y, p.y); }
       const cw = p.s.length ? (p.w || p.s.length*5) / p.s.length : 5;
       // Mojibake zeichenweise wie im Text reparieren (längentreu, damit cx stimmt) —
       // sonst findet die x-Karte "kWh/m≤a" nie als kWh/m²a (proholz).
-      for (let i=0;i<p.s.length;i++){ s += moji ? (MOJI[p.s[i]] || p.s[i]) : p.s[i]; cx.push(p.x + (i+0.5)*cw); }
+      for (let i=0;i<p.s.length;i++){ s += moji ? (MOJI[p.s[i]] || p.s[i]) : p.s[i]; cx.push(p.x + (i+0.5)*cw); cy.push(p.y); }
       lastX = p.x + p.s.length*5;
     }
-    return (XMAP[l] = {s, cx});
+    // cy: echte Baseline je Zeichen (null ohne y in den Positionsdaten)
+    return (XMAP[l] = {s, cx, cy: pos[l].parts.every(p => typeof p.y === 'number') ? cy : null});
   }
   // x-Mitte des ersten Treffers von re in Zeile l (null = keine Positionsdaten
   // oder kein Treffer)
@@ -1168,6 +1192,50 @@ function extract(text, linePos){
     return found;
   }
 
+  // -- Gebäudedaten-Nachlese über Positionen --------------------------------
+  // Steht der Wert nicht neben dem Label, liegt er oft in derselben Tabellen-
+  // ZEILE, aber auf einer anderen Textzeile (der y-Bucket trennt Label und Wert
+  // um 1-2 Einheiten): eawz 2024 "Kompaktheit A/V" / "0,66 m", ArchiPHYSIK 25
+  // "Gebäude-Hüllfläche (A)" / "3.538,2m²", AX3000 "Kompaktheit (A/V)" /
+  // "0,51 1/m". Gesucht wird im FELD des Labels (Labelanfang bis zum nächsten
+  // Label derselben Zeile) auf Textzeilen, deren Baseline höchstens ±5 vom Label
+  // abweicht (Zeilenabstand der Formulare >= 10) — der nächstgelegene gewinnt.
+  // opt.after: Wert muss rechts vom Labelende stehen; opt.text: Rohtext statt Zahl.
+  function nearLabel(labelRe, valRe, opt){
+    opt = opt || {};
+    if (!pos) return '';
+    for (let l=0; l<lines.length && l<pos.length; l++){
+      const m = xmap(l); if (!m || !m.cy) continue;
+      const hit = m.s.match(labelRe); if (!hit) continue;
+      const i1 = hit.index + hit[0].length;
+      const x0 = opt.after ? m.cx[i1-1] + 2 : m.cx[hit.index] - 8, y0 = m.cy[hit.index];
+      const nl = m.s.slice(i1).search(/\s[A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöüß\-]{3,}/);
+      const x1 = nl < 0 ? Infinity : m.cx[i1 + nl + 1];
+      const cands = [];
+      for (let j = l-3; j <= l+3; j++){
+        if (!pos[j] || pos[j].page !== pos[l].page) continue;
+        const mj = xmap(j); if (!mj || !mj.cy) continue;
+        const re = new RegExp(valRe.source, 'gi');
+        for (let g; (g = re.exec(mj.s)) !== null; ){
+          const cx = mj.cx[g.index], cy = mj.cy[g.index];
+          if (cx === undefined || cx < x0 || cx >= x1 || Math.abs(cy - y0) > 5) continue;
+          if (j === l && g.index < i1) continue;            // das Label selbst
+          const v = opt.text ? g[1].trim() : cleanNum(g[1]);
+          if (opt.ok && !opt.ok(opt.text ? v : parseFloat(v))) continue;
+          cands.push({v, d: Math.abs(cy - y0) + (j === l ? 0 : 0.01)});
+        }
+      }
+      if (cands.length){ cands.sort((a, b) => a.d - b.d); return cands[0].v; }
+    }
+    return '';
+  }
+  const NUMU = u => new RegExp('('+NUMRE+')\\s*'+u);
+  if (!r.kompaktheit)  r.kompaktheit  = nearLabel(/Kompaktheit/i, NUMU('(?:1\\/)?m(?![²³])'), {ok:rng(0.02, 3)});
+  if (!r.char_laenge)  r.char_laenge  = nearLabel(/charakteristische\s+L[äa]nge/i, NUMU('m(?![²³])'), {ok:rng(0.2, 40)});
+  if (!r.huellflaeche) r.huellflaeche = nearLabel(/Geb[äa]ude-?H[üu]llfl[äa]che/i, NUMU('m²'), {ok:rng(5, 5e6)});
+  if (!r.heizgradtage) r.heizgradtage = nearLabel(/Heizgradtage/i, /(\d{3,5})\s*K/, {ok:rng(1000, 9000)});
+  if (!r.bauweise)     r.bauweise     = nearLabel(/Bauweise/i, /((?:sehr\s+)?(?:mittelschwer|leicht|mittel|schwer))e?\b/, {text:true});
+
   // HWB: Hauptspalte = Heizwärmebedarf im Standortklima (realer Bedarf).
   r.hwb        = byGerman(/Heizw[äa]rmebedarf/i, {section:'SK', notSuffix:/Referenz|Ref/i})
               || byGerman(/HWB\s*\(?\s*Q/i, {})   // eawz: "HWB (Qh,a,SK)"
@@ -1317,10 +1385,14 @@ function extract(text, linePos){
   const LEKLBL = /LEK\s*(?:T|\+;?)?\s*-?\s*Wert/i;
   for (let l=0;l<lines.length && !r.lek;l++){
     if (!LEKLBL.test(lines[l])) continue;
-    let m = lines[l].match(/LEK\s*(?:T|\+;?)?\s*-?\s*Wert\s*[T:]?\s*(\d+(?:,\d+)?)\b/i);
+    // (?![\d,]) statt \b: AX3000 klebt das Folgelabel an ("19,12RH-WB-System")
+    let m = lines[l].match(/LEK\s*(?:T|\+;?)?\s*-?\s*Wert\s*[T:]?\s*(\d+(?:,\d+)?)(?![\d,])/i);
     if (!m) m = (lines[l+1]||'').match(/\bT\s+(\d+,\d+)/);
     if (m && m[1]!=='0' && m[1]!=='0,0') r.lek = m[1];
   }
+  // ECOTECH 2023 setzt den Wert in die Zeile unter das Label ("LEK-Wert" /
+  // "Teil-BGF  0,0 m²  20,05  RH-WB-System") -> im Feld des Labels suchen.
+  if (!r.lek) r.lek = nearLabel(LEKLBL, /((?<![\d,.])\d+,\d+)(?![\d,])(?!\s*(?:m[²³]|kWh|kg|W\/|°))/, {ok: n => n > 0 && n < 500});
   const fg = text.replace(/[ \t]+/g,' ');
   // eawz/Vorarlberg-Layout: saubere Inserat-/Förderungs-Kennzahlen überschreiben
   // die unsicheren Stapel-Spalten. Greifen nur, wenn diese Labels vorkommen.
@@ -1732,7 +1804,7 @@ async function* walk(dirHandle, prefix='', inEnergie=false){
 
 // PDF -> layouttreuer Text. Items werden je Zeile (y) gruppiert und nach x sortiert,
 // Spaltenlücken als Doppel-Leerzeichen -> die Zellen-Logik kann Label/Wert trennen.
-// Zusätzlich linePos: 1:1 zu den Textzeilen {page, parts:[{x,w,s}]} mit den ECHTEN
+// Zusätzlich linePos: 1:1 zu den Textzeilen {page, parts:[{x,y,w,s}]} mit den ECHTEN
 // pdf.js-Positionen/-Breiten -> extract() kann Tabellenspalten per x zuordnen.
 async function pdfToText(file){
   const buf = await file.arrayBuffer();
@@ -1750,7 +1822,7 @@ async function pdfToText(file){
       if (!it.str || !it.transform) continue;
       const key = Math.round(it.transform[5]/2)*2;      // y auf 2px-Raster
       if (!linesMap.has(key)) linesMap.set(key, []);
-      linesMap.get(key).push({x: it.transform[4], w: it.width||0, s: it.str});
+      linesMap.get(key).push({x: it.transform[4], y: it.transform[5], w: it.width||0, s: it.str});
     }
     const ys = [...linesMap.keys()].sort((a,b)=>b-a);    // oben (großes y) zuerst
     for (const y of ys){

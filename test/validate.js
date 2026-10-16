@@ -46,7 +46,7 @@ async function pdfToText(buf) {
 			if (!it.str || !it.transform) continue;
 			const k = Math.round(it.transform[5] / 2) * 2;
 			if (!lm.has(k)) lm.set(k, []);
-			lm.get(k).push({ x: it.transform[4], w: it.width || 0, s: it.str });
+			lm.get(k).push({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: it.str });
 		}
 		for (const y of [...lm.keys()].sort((a, b) => b - a)) {
 			const parts = lm.get(y).sort((a, b) => a.x - b.x);

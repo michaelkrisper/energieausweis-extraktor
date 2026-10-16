@@ -48,7 +48,7 @@ gemeinsam. Die `pdfToText`-Zeilenrekonstruktion ist in beiden bewusst 1:1 identi
 
 **Pipeline:** PDF → `pdfToText` rekonstruiert layouttreuen Text aus den 2D-Textpositionen von pdf.js
 (Items nach y-Position zu Zeilen gruppiert, nach x sortiert; Lücken > ~14 Einheiten → Doppel-Leerzeichen)
-und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,w,s}]}` mit den ECHTEN
+und liefert zusätzlich `linePos` — 1:1 zu den Textzeilen `{page, parts:[{x,y,w,s}]}` mit den ECHTEN
 pdf.js-Positionen. → `extract(text, linePos)` füllt pro Feld einen Wert (ohne `linePos` fallen alle
 Positions-Helfer auf reine Textlogik zurück). → editierbare HTML-Tabelle → SheetJS-Export (`.xlsx`,
 Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
@@ -78,6 +78,14 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   AUSSCHLIESSLICH aus Header-Tokens besteht (Prosa zählt nicht). `numAboveLabel()` holt x-ausgerichtete
   Werte aus der Zeile ÜBER dem Label (AX3000 stapelt `0,29  -16,0` über „mittlerer U-Wert … Norm-Außen…").
   `byLabel` hat einen Fließtext-Guard (kleingeschriebenes Wort vor dem Label = Satz, kein Feld).
+- **Gebäudedaten (`byLabel` num + `nearLabel`):** Zahl mit Einheit schlägt Zahl ohne (zwei Durchgänge
+  — sonst gewinnt das Inhaltsverzeichnis „… Brutto-Grundfläche und -volumen Projekt  18"); Wertzellen
+  nur bis zur nächsten Label-Zelle (eawz 2024 „Kompaktheit A/V  Soll-Innentemperatur  22,0 °C" lieferte
+  sonst 22,0); jedes Feld hat einen Plausibilitätsbereich (`opt.ok`, z. B. A/V 0,02–3, HGT 1000–9000,
+  Seehöhe 100–4000) — außerhalb = Fehlgriff → nächster Treffer bzw. leer. Steht der Wert nicht neben
+  dem Label, holt `nearLabel()` ihn aus derselben Tabellen-ZEILE: x im Feld des Labels (Labelanfang
+  bis nächstes Label), Baseline ±5 vom Label (nutzt `y` aus `linePos`; der y-Bucket trennt Label und
+  Wert oft um 1–2 Einheiten, Zeilenabstand der Formulare ≥ 10).
 - **Positionslogik in Anforderungszeilen (`istRight`/`dropLimits`):** Alle Layout-Familien des Korpus
   drucken eine Anforderungszeile gleich: `Bezeichnung | [erfüllt] | Anforderung | Abkürzung | IST-Wert`
   (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die
