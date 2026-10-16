@@ -85,7 +85,16 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   Seehöhe 100–4000) — außerhalb = Fehlgriff → nächster Treffer bzw. leer. Steht der Wert nicht neben
   dem Label, holt `nearLabel()` ihn aus derselben Tabellen-ZEILE: x im Feld des Labels (Labelanfang
   bis nächstes Label), Baseline ±5 vom Label (nutzt `y` aus `linePos`; der y-Bucket trennt Label und
-  Wert oft um 1–2 Einheiten, Zeilenabstand der Formulare ≥ 10).
+  Wert oft um 1–2 Einheiten, Zeilenabstand der Formulare ≥ 10). Gleiches Prinzip für den Aussteller
+  (Name knapp über/unter dem Label, mehrzeilig über x-bündige Folgezeilen ohne Ziffer) und für
+  WB-Systeme, die AX3000 zweizeilig um die leere Labelzeile zentriert (`textAroundLabel`).
+- **OIB-Formularraster (Partnerlabel):** Deckblattkopf (BEZEICHNUNG/Umsetzungsstand … Grundstücksnr./
+  Seehöhe) und GEBÄUDEKENNDATEN (3 Spalten, 9 Zeilen) sind im OIB-Muster normiert. Fehlen einzelne
+  Labels im Textlayer (AX3000 über „Microsoft: Print To PDF" rastert Teile, `roitham`), bestimmen die
+  vorhandenen Labels Zeilenabstand und Spalten-x; Text in Zeile/Spalte eines fehlenden Labels gehört
+  zu dessen Feld. Nur mit ≥ 3 rasterkonsistenten Labels, nur für leere Felder, nur in Zeilen mit
+  eigenem Label (oder direkt darunter), nie in eine Zelle mit fremdem Label, nur plausible Werte.
+  Völlig labellose Formulare (ArchiPHYSIK ≥ 18 IfEA/OÖ) erreicht das bewusst NICHT.
 - **Positionslogik in Anforderungszeilen (`istRight`/`dropLimits`):** Alle Layout-Familien des Korpus
   drucken eine Anforderungszeile gleich: `Bezeichnung | [erfüllt] | Anforderung | Abkürzung | IST-Wert`
   (GEQ, ArchiPHYSIK, ECOTECH). Der Ist-Wert ist damit der Wert **rechts der Abkürzung**; links steht die

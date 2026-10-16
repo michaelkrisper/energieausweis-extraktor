@@ -567,13 +567,18 @@ function extract(text, linePos){
   if (!/\d/.test(r.einlagezahl)) r.einlagezahl = '';
   r.nutzungsprofil = byLabel(lines, /Nutzungsprofil|Verwendungszweck|Geb[äa]udetyp|Geb[äa]udeart/i, {max:60})
                      .replace(/\s*(Letzte Ver[äa]nderung|Baujahr|Letzte Ver|Erbaut).*$/i,'').trim();
+  // ohne Buchstaben kein Profil: AX3000-Druck mit gerastertem Profil liefert sonst
+  // die Jahreszahl der Nachbarzelle ("Nutzungsprofil   2024" = Letzte Veränderung)
+  if (!/[A-Za-zÄÖÜäöü]{3}/.test(r.nutzungsprofil)) r.nutzungsprofil = '';
   if (!r.nutzungsprofil){
     // manche Layouts stellen den Profil-Wert in die Zeile ÜBER das Label;
     // ETU bricht ihn um das Label herum um ("…mit einer oder zwei" / Label-
     // zeile / "Nutzungseinheiten") -> unvollständigen Wert mit der Zeile
     // UNTER dem Label vervollständigen.
     for (let l=1;l<lines.length;l++){
-      if (/^Nutzungsprofil\b/i.test(lines[l].trim()) && /^[A-ZÄÖÜ][a-zäöüß]/.test(lines[l-1].trim())){
+      // die Vorzeile darf kein Nachbar-LABEL sein (AX3000 roitham: "Baujahr  1945")
+      if (/^Nutzungsprofil\b/i.test(lines[l].trim()) && /^[A-ZÄÖÜ][a-zäöüß]/.test(lines[l-1].trim())
+          && !/^(?:Baujahr|Letzte|Umsetzungs|Stra[ßs]e|Katastral|Geb[äa]ude\s*\(|BEZEICHNUNG|Erbaut)/i.test(lines[l-1].trim())){
         let v = cells(lines[l-1])[0].trim();
         const cont = cells(lines[l+1]||'')[0] || '';
         // "…mit drei bis neun" / Label / "Nutzungseinheiten": die Folgezeile ist
@@ -1283,6 +1288,95 @@ function extract(text, linePos){
   if (!r.heizgradtage) r.heizgradtage = nearLabel(/Heizgradtage/i, /(\d{3,5})\s*K/, {ok:rng(1000, 9000)});
   if (!r.bauweise)     r.bauweise     = nearLabel(/Bauweise/i, /((?:sehr\s+)?(?:mittelschwer|leicht|mittel|schwer))e?\b/, {text:true});
 
+  // -- OIB-Formularraster: Partnerlabel derselben Zeile ------------------------
+  // Deckblattkopf und GEBÄUDEKENNDATEN sind im OIB-Muster normiert (jede Software
+  // druckt dieselben Zeilen in derselben Reihenfolge). Fehlt einzelnen Feldern das
+  // Label im Textlayer (AX3000 über "Microsoft: Print To PDF" rastert Teile davon:
+  // roitham "Gemeindeplatz 9  KatastralgemeindeRoitham", ".358   425 m"), bestimmen
+  // die VORHANDENEN Labels der Tabelle Zeilenraster (Abstand) und Spalten-x; Text in
+  // Zeile r / Spalte c gehört dann zum Feld des fehlenden Labels. Greift nur mit
+  // mindestens drei rasterkonsistenten Labels (ohne Labels — labellose Formulare —
+  // passiert hier nichts), nur für leere Felder, nur in Zeilen mit eigenem Label
+  // oder direkt unter einer solchen, nie in eine Zelle mit fremdem Label (anderes
+  // Formular: IfEA-Übersicht "Nutzungsprofil…Baujahr 1903") und nur mit plausiblem Wert.
+  if (pos){
+    const T_KOPF = {
+      rows: [[/BEZEICHNUNG/, /Umsetzungsstand|EA-?Art/], [/Geb[äa]ude\s*\(?-?\s*teil/, /Baujahr/],
+             [/Nutzungsprofil/, /Letzte\s+Ver/], [/Stra[ßs]e/, /Katastralgemeinde/], [/PLZ/, /KG-?N/],
+             [/Grundst[üu]cks/, /Seeh[öo]he/]],
+      fields: [[null,'ea_art'], [null,'baujahr'], ['nutzungsprofil','letzte_veraenderung'], ['adresse','kg'],
+               ['plz_ort','kg_nr'], ['gstnr','seehoehe']]};
+    const T_KENN = {
+      rows: [[/Brutto-?\s*Grundfl/, /Heiztage/, /Art der L/], [/Bezugs/, /Heizgradtage/, /Solarthermie/],
+             [/Brutto-?\s*Volumen/, /Klimaregion/, /Photovoltaik/], [/Geb[äa]ude-?H[üu]llfl/, /Norm-?Au/, /Stromspeicher/],
+             [/Kompaktheit/, /Soll-?Innen/, /WW-?WB-?System\s*\(prim/], [/charakteristische/, /mittlerer\s+U/, /WW-?WB-?System\s*\(sek/],
+             [/Teil-?BGF/, /LEK/, /RH-?WB-?System\s*\(prim/], [/Teil-?BF/, /Bauweise/, /RH-?WB-?System\s*\(sek/],
+             [/Teil-?V(?!o)/, null, /K[äa]ltebereitstellung/]],
+      fields: [['bgf','heiztage','lueftung'], ['bezugsflaeche','heizgradtage','solarthermie'], ['bruttovolumen','klimaregion','photovoltaik'],
+               ['huellflaeche','norm_aussen','stromspeicher'], ['kompaktheit','soll_innen','ww_system'], ['char_laenge','u_mittel',null],
+               [null,'lek','rh_system'], [null,'bauweise',null], [null,null,'kuehlsystem']]};
+    // Wertprüfung je Feld (Zahl im Plausibilitätsbereich bzw. Text mit Inhalt)
+    const N = (a, b) => t => { const v = firstNum(t); return v !== '' && +v >= a && +v <= b ? v : ''; };
+    const TXT = t => /[A-Za-zÄÖÜäöü]{2}/.test(t) && !/^-+$/.test(t) ? t : '';
+    const PARSE = {bgf:N(5,5e6), bezugsflaeche:N(5,5e6), bruttovolumen:N(10,5e7), huellflaeche:N(5,5e6),
+      heiztage:N(0,366), heizgradtage:N(1000,9000), norm_aussen:N(-40,0), soll_innen:N(5,35), kompaktheit:N(0.02,3),
+      char_laenge:N(0.2,40), u_mittel:N(0.03,6), lek:N(0.5,500), seehoehe:N(100,4000), solarthermie:N(0,1e5),
+      photovoltaik:N(0,1e5), stromspeicher:N(0,1e5),
+      baujahr: t => (t.match(/\b(1[0-9]{3}|20\d{2})\b/)||[])[1] || '',
+      letzte_veraenderung: t => /(?:18|19|20)\d{2}/.test(t) ? t : '',
+      kg_nr: t => (t.match(/^\d{3,6}$/)||[])[0] || '', gstnr: t => /\d/.test(t) ? t : '',
+      adresse: t => /[A-Za-zÄÖÜäöü]{3}.*\d/.test(t) ? t : '', plz_ort: t => /^\d{4}\s+\S/.test(t) ? t : '',
+      nutzungsprofil: TXT, kg: TXT, ea_art: TXT, lueftung: TXT, klimaregion: TXT, ww_system: TXT, rh_system: TXT, kuehlsystem: TXT};
+    for (const T of [T_KOPF, T_KENN]){
+      const nc = T.rows[0].length;
+      for (const pg of new Set(pos.map(p => p.page))){
+        // Label-Treffer: am Zellenanfang oder ohne Leerzeichen angeklebt ("…Nutzungs-
+        // einheitenLetzte Veränderung"), nicht im Fließtext/Wert ("Feldkirchner Straße")
+        const hits = [];
+        for (let j=0; j<pos.length; j++){
+          if (pos[j].page !== pg) continue;
+          const m = xmap(j); if (!m || !m.cy) continue;
+          T.rows.forEach((row, ri) => row.forEach((re, ci) => {
+            if (!re) return;
+            const g = new RegExp(re.source, 'g');
+            for (let h; (h = g.exec(m.s)) !== null; )
+              if (h.index === 0 || /\S/.test(m.s[h.index-1]) || /\s{2}$/.test(m.s.slice(0, h.index)))
+                hits.push({r:ri, c:ci, x:m.cx[h.index], y:m.cy[h.index]});
+          }));
+        }
+        // Zeilenraster: Abstand P und Lage y0 (Zeile 0), die die meisten Labels erklären
+        let best = null;
+        for (const a of hits) for (const b of hits){
+          if (b.r <= a.r) continue;
+          const P = (a.y - b.y) / (b.r - a.r); if (P < 8 || P > 30) continue;
+          const y0 = a.y + a.r * P;
+          const ok = hits.filter(h => Math.abs(h.y - (y0 - h.r * P)) <= 3);
+          if (new Set(ok.map(h => h.r)).size >= 2 && (!best || ok.length > best.ok.length)) best = {P, y0, ok};
+        }
+        if (!best || best.ok.length < 3) continue;
+        const X = [];
+        for (let c=0; c<nc; c++){ const xs = best.ok.filter(h => h.c === c).map(h => h.x); X[c] = xs.length ? Math.min(...xs) : null; }
+        const rowHas = ri => best.ok.some(h => h.r === ri);
+        T.rows.forEach((row, ri) => row.forEach((re, ci) => {
+          const f = T.fields[ri][ci];
+          if (!f || r[f] || X[ci] === null || best.ok.some(h => h.r === ri && h.c === ci)) return;
+          if (!rowHas(ri) && !rowHas(ri - 1)) return;
+          const x1 = ci + 1 < nc ? X[ci + 1] : Infinity; if (x1 === null) return;
+          const ry = best.y0 - ri * best.P, got = [];
+          // fremdes Label in der Zielzelle -> anderes Formular, nichts zuordnen
+          if (hits.some(h => Math.abs(h.y - ry) <= 4 && h.x >= X[ci] - 4 && h.x < x1 - 4)) return;
+          for (let j=0; j<pos.length; j++){
+            if (pos[j].page !== pg) continue;
+            for (const s of segs(j)) if (Math.abs(s.y - ry) <= 4 && s.x >= X[ci] - 4 && s.x < x1 - 4) got.push(s);
+          }
+          if (!got.length) return;
+          const v = PARSE[f](got.sort((a, b) => a.x - b.x).map(s => s.t).join(' ').trim());
+          if (v) r[f] = v;
+        }));
+      }
+    }
+  }
+
   // HWB: Hauptspalte = Heizwärmebedarf im Standortklima (realer Bedarf).
   r.hwb        = byGerman(/Heizw[äa]rmebedarf/i, {section:'SK', notSuffix:/Referenz|Ref/i})
               || byGerman(/HWB\s*\(?\s*Q/i, {})   // eawz: "HWB (Qh,a,SK)"
@@ -1444,6 +1538,21 @@ function extract(text, linePos){
   r.eawz_rh = byGerman(/Energieaufwandszahl\s+Raumheizung/i, {});
   r.eawz_h  = byGerman(/Energieaufwandszahl\s+Heizen/i, {});
   r.eawz_k  = byGerman(/Energieaufwandszahl\s+Kühlen/i, {});
+  // Langlabel nur als Grafik (AX3000 roitham): Abkürzung gestapelt "e  =  0,00" über
+  // dem Subskript "AWZ,K" -> Wert rechts davon auf der Zeile des "e"
+  function stackedE(t){
+    if (!pos) return '';
+    for (let l=0; l<lines.length-1; l++){
+      if (!pos[l+1] || pos[l+1].page !== pos[l].page) continue;
+      const xs = xAt(l+1, new RegExp('(?<![A-Za-z])AWZ\\s*,\\s*'+t+'\\b')); if (xs === null) continue;
+      const xe = xAt(l, /(?<!\S)e(?!\S)/); if (xe === null || Math.abs(xe - xs) > 25) continue;
+      let best = null;
+      for (const c of valsRight(l, xe, /((?<![\d,.])\d+,\d+)(?![\d,])/)) if (!best || c.cx < best.cx) best = c;
+      if (best) return best.v;
+    }
+    return '';
+  }
+  for (const [k, t] of [['eawz_ww','WW'], ['eawz_rh','RH'], ['eawz_h','H'], ['eawz_k','K']]) if (!r[k]) r[k] = stackedE(t);
   r.ern_anteil = byLabel(lines, /Erneuerbarer Anteil/i, {max:40});
   // nur plausible Aussagen behalten — der Wert steht z.T. gar nicht im PDF und
   // byLabel würde sonst die nächste Kennzahl-Zeile greifen
