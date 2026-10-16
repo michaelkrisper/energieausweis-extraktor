@@ -58,7 +58,7 @@ async function pdfToText(buf) {
 				lastX = pt.x + pt.s.length * 5;
 			}
 			text += `${line}\n`;
-			linePos.push({ page: p, parts });
+			linePos.push({ page: p, y, parts });
 		}
 		text += "\n";
 		linePos.push({ page: p, parts: [] });

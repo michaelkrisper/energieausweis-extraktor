@@ -448,6 +448,245 @@ function isEnergieausweis(text){
   return s >= 2;
 }
 
+// ============================================================================
+//  ArchiPHYSIK-Formular OIB 2019 OHNE Labels im Textlayer ("labellos").
+//  ArchiPHYSIK 18–25 (IfEA, Pilz & Partner, RWT plus …) druckt sämtliche
+//  Formularlabels des OIB-2019-Ausweises als Vektorgrafik — im Textlayer stehen
+//  NUR die Werte an ihren Formularplätzen. Die Label-Logik findet dort nichts und
+//  greift ins Datenblatt/den Anhang (Diagrammachse 100,0 als HHSB/BSB, „Kessel
+//  Baujahr vor 1978", HWB-Zeile als EEB, Projekt-Deckblatt mit Erstellername).
+//  Zuordnung hier rein strukturell, ohne absolute Koordinaten:
+//  - Seite 2 des Ausweises: ArchiPHYSIK-Fußzeile, keine Formularlabels, Datums-
+//    paar Ausstellung/Gültigkeit x-gleich untereinander (ERSTELLT-Block).
+//  - Spalten = rechtsbündige Wertkanten, Zeilen = Rasterfolge (Abstand 9–19).
+//  - Standortklima: 15 (WG) bzw. 20 (NWG) Zeilen in fester Formularreihenfolge;
+//    die Q-Spalte (kWh/a) fehlt GENAU in den eAWZ-/fGEE-Zeilen, jedes Paar
+//    erfüllt Q / spez. = BGF (Flächenbezug), PEB = PEB n.ern. + PEB ern.
+//  - Gebäudekenndaten: BGF > BF, V > BGF, A/V = A/V_B, l_c = V_B/A.
+//  - Deckblatt (Vorseite): Zeilenraster ab der PLZ-Zeile, Klassenbuchstaben
+//    nach x (HWB PEB CO2 fGEE).
+//  Was nicht eindeutig zuordenbar ist, bleibt leer. Rückgabe: Feldobjekt, das in
+//  extract() die generischen Werte ÜBERSCHREIBT, oder null (anderes Layout).
+// ============================================================================
+function apLabellos(pos, text, fix){
+  if (!pos) return null;
+  const pg = new Map();                          // Seite -> [{x, r(rechte Kante), y, s}]
+  for (const ln of pos){
+    if (ln.y === undefined) continue;
+    for (const p of ln.parts){
+      const s = fix(p.s).replace(/[−–‐‑]/g,'-').replace(/\s+/g,' ').trim();
+      if (!s) continue;
+      if (!pg.has(ln.page)) pg.set(ln.page, []);
+      pg.get(ln.page).push({x:p.x, r:p.x + (p.w || s.length*5), y:ln.y, s});
+    }
+  }
+  const isNum = s => /^-?\d{1,3}(?:[ .]\d{3})+(?:,\d+)?$|^-?\d+(?:,\d+)?$/.test(s);
+  const isInt = s => /^\d{1,3}(?:[ .]\d{3})*$/.test(s);
+  const isDash = s => s === '-';
+  const val = s => parseFloat(cleanNum(s));
+  const DATE = /^\d{2}\.\d{2}\.(\d{4})$/;
+  const FOOT = /ArchiPHYSIK\s+\d/;
+  const LABELS = /Heizw[äa]rmebedarf|Brutto-?Grundfl|GEB[ÄA]UDEKENNDATEN|Endenergiebedarf|Standortklima|Referenzklima/i;
+  // Wertspalten: rechtsbündige Kanten (Kette, Toleranz 2,5)
+  const colsByRight = items => {
+    const out = [];
+    for (const it of items.slice().sort((a,b) => a.r-b.r)){
+      const c = out[out.length-1];
+      if (c && it.r - c[c.length-1].r <= 2.5) c.push(it); else out.push([it]);
+    }
+    return out;
+  };
+  // zusammenhängende Folgen im Zeilenraster, oben -> unten
+  const runs = col => {
+    const out = []; let cur = [];
+    for (const it of col.slice().sort((a,b) => b.y-a.y)){
+      const last = cur[cur.length-1];
+      if (last && last.y - it.y < 3) continue;   // Duplikat-Item derselben Zeile
+      if (last && (last.y - it.y > 19 || last.y - it.y < 9)){ out.push(cur); cur = []; }
+      cur.push(it);
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  };
+  const rowText = (its, y, x0, x1) => its.filter(i => Math.abs(i.y-y) <= 3 && i.x >= x0 && i.x < x1)
+    .sort((a,b) => a.x-b.x).map(i => i.s).join(' ').trim();
+  const body = its => {                          // ohne Fußzeile/Wasserzeichen
+    const foot = Math.max(-Infinity, ...its.filter(i => FOOT.test(i.s)).map(i => i.y));
+    return its.filter(i => i.y > foot + 4 && i.r - i.x < 300 && !/^Exemplar f/i.test(i.s));
+  };
+
+  // -- Seite 2 des Ausweises finden ----------------------------------------
+  let page = null, its = null, d1 = null, d2 = null;
+  for (const [p, all] of [...pg].sort((a,b) => a[0]-b[0])){
+    if (!all.some(i => FOOT.test(i.s)) || LABELS.test(all.map(i => i.s).join(' '))) continue;
+    const b = body(all), ds = b.filter(i => DATE.test(i.s));
+    for (const a of ds) for (const c of ds){
+      const dy = a.y - c.y, yr = +c.s.slice(6) - +a.s.slice(6);
+      if (!d1 && Math.abs(a.x-c.x) < 3 && dy >= 8 && dy <= 25 && yr >= 1 && yr <= 10){ d1 = a; d2 = c; }
+    }
+    if (d1){ page = p; its = b; break; }
+  }
+  if (!page) return null;
+  const e = d1.y - d2.y;                         // Zeilenabstand im ERSTELLT-Block
+  const out = {};
+
+  // -- ERSTELLT: GWR | Ausstellung | Gültigkeit | GZ untereinander, ErstellerIn rechts
+  const at = y => its.find(i => Math.abs(i.x-d1.x) < 4 && Math.abs(i.y-y) <= 4);
+  out.ausstelldatum = d1.s;
+  out.gueltig_bis   = d2.s;
+  const gz = at(d2.y - e), gwr = at(d1.y + e);
+  out.gz  = gz && /\d/.test(gz.s) && !DATE.test(gz.s) ? gz.s : '';
+  out.gwr = gwr && /^\d[\d .\-\/]*$/.test(gwr.s) ? gwr.s : '';
+  if (!out.gwr) out.gwr = (text.match(/GWR-Objektnummer zugeordnet:\s*(\d+)/) || [])[1] || ''; // ZEUS-OÖ-Stempel
+  out.aussteller = rowText(its, d1.y + e, d1.x + 100, Infinity).slice(0, 60);
+  if (!/[A-Za-zÄÖÜäöü]{2}/.test(out.aussteller)) out.aussteller = '';
+
+  // -- Standortklima: spez. Spalte mit 15/20 Zeilen, Q-Spalte als Anker -----
+  const WG  = ['hwb_ref_sk','hwb','wwwb','heb','eawz_ww','eawz_rh','eawz_h','hhsb','eeb','peb','peb_nern','peb_ern','co2','fgee','pve'];
+  const NWG = ['hwb_ref_sk','hwb','wwwb','heb','eawz_ww','eawz_rh','eawz_h','bsb','kb','keb','eawz_k','befeb','beleb','eeb','peb','peb_nern','peb_ern','co2','fgee','pve'];
+  const RK  = {WG: ['hwb_ref_rk','hwb_rk','eeb_rk','fgee_rk'], NWG: ['hwb_ref_rk','hwb_rk','kb_stern_rk','eeb_rk','fgee_rk']};
+  const above = its.filter(i => i.y > d1.y + 1.5*e);
+  let sk = null;
+  for (const col of colsByRight(above.filter(i => /^-?\d[\d .]*,\d+$/.test(i.s) || isDash(i.s))))
+    for (const run of runs(col)){
+      const keys = run.length === 15 ? WG : run.length === 20 ? NWG : null;
+      if (!keys || sk) continue;
+      const q = run.map(sp => above.find(i => Math.abs(i.y-sp.y) <= 3 && i.r < sp.r-40 && i.r > sp.r-220 && isInt(i.s)));
+      if (!keys.every((k,i) => !q[i] === /^(?:eawz_|fgee)/.test(k))) continue;
+      const rat = keys.map((k,i) => q[i] && val(run[i].s) >= 1 ? val(q[i].s)/val(run[i].s) : null).filter(x => x).sort((a,b) => a-b);
+      const A = rat[rat.length >> 1];
+      if (!(A > 0) || !keys.every((k,i) => !q[i] || isDash(run[i].s) ||
+          Math.abs(val(q[i].s)/A - val(run[i].s)) <= Math.max(0.08, val(run[i].s)*0.006))) continue;
+      const g = k => val(run[keys.indexOf(k)].s);
+      if (!(Math.abs(g('peb') - g('peb_nern') - g('peb_ern')) <= 0.25)) continue;
+      sk = {keys, run, type: keys === WG ? 'WG' : 'NWG'};
+    }
+  const own = [...NWG, 'hhsb', ...RK.NWG];
+  for (const k of own) out[k] = '';
+  if (sk) sk.keys.forEach((k,i) => { out[k] = isDash(sk.run[i].s) ? '' : cleanNum(sk.run[i].s); });
+  const skTop = sk ? sk.run[0].y : -Infinity;
+
+  // -- Gebäudekenndaten: Spalte 1 = BGF | BF | V_B | A | A/V | l_c (Formellogik)
+  const KD = ['bgf','bezugsflaeche','bruttovolumen','huellflaeche','kompaktheit','char_laenge'];
+  const K2 = ['heiztage','heizgradtage','klimaregion','norm_aussen','soll_innen','u_mittel','lek','bauweise'];
+  const K3 = ['lueftung','solarthermie','photovoltaik','stromspeicher','ww_system','','rh_system','','kuehlsystem'];
+  for (const k of [...KD, ...K2, ...K3]) if (k) out[k] = '';
+  let kd = null;
+  const upper = above.filter(i => i.y > skTop + 2*e);
+  for (const col of colsByRight(upper.filter(i => isNum(i.s) || isDash(i.s))))
+    for (const run of runs(col))
+      for (let s=0; !kd && s+6 <= run.length; s++){
+        const [bgf, bf, vb, a, av, lc] = run.slice(s, s+6).map(i => isNum(i.s) ? val(i.s) : NaN);
+        if (!(vb > bgf && bgf > bf && bf > 0 && a > 0)) continue;
+        if (Math.abs(av - a/vb) > 0.012 || Math.abs(lc - vb/a) > 0.012) continue;
+        kd = {y0: run[s].y, pitch: (run[s].y - run[s+5].y)/5, r: run[s].r, col: run};
+        KD.forEach((k,i) => { out[k] = cleanNum(run[s+i].s); });
+      }
+  if (kd){
+    const slot = it => { const k = Math.round((kd.y0 - it.y)/kd.pitch);
+      return Math.abs(kd.y0 - k*kd.pitch - it.y) <= kd.pitch*0.35 ? k : -1; };
+    const rest = upper.filter(i => i.x > kd.r + 20 && slot(i) >= 0 && slot(i) <= 8).sort((a,b) => a.x-b.x);
+    // Spalte 2 | Spalte 3 trennt die größte Lücke der linken Kanten
+    let cut = -1, gap = 60;
+    for (let i=1;i<rest.length;i++) if (rest[i].x - rest[i-1].x > gap){ gap = rest[i].x - rest[i-1].x; cut = i; }
+    if (cut > 0){
+      const cell = (arr, k) => arr.filter(i => slot(i) === k).map(i => i.s).join(' ').trim();
+      const c2 = rest.slice(0, cut), c3 = rest.slice(cut);
+      const chk = {
+        heiztage: v => /^\d{1,3}$/.test(v) && +v <= 366,
+        heizgradtage: v => /^\d[\d.]{2,5}$/.test(v),
+        klimaregion: v => /^[A-ZÄÖÜ]{1,3}(?:\/[A-ZÄÖÜ]{1,3})?$/.test(v),
+        norm_aussen: v => /^-\d+(?:,\d+)?$/.test(v),
+        soll_innen: v => /^\d{2}(?:,\d+)?$/.test(v),
+        u_mittel: v => /^\d,\d+$/.test(v),
+        lek: v => /^\d+(?:,\d+)?$/.test(v),
+        bauweise: v => /^(?:sehr\s+)?(?:leicht|mittelschwer|schwer)e?$/i.test(v),
+      };
+      K2.forEach((k,i) => { const v = cell(c2, i);
+        if (chk[k](v)) out[k] = k === 'bauweise' ? v.replace(/e$/,'') : (k === 'klimaregion' ? v : cleanNum(v)); });
+      K3.forEach((k,i) => { if (!k) return; const v = cell(c3, i);
+        if (/^(?:solarthermie|photovoltaik|stromspeicher)$/.test(k)) out[k] = isNum(v) ? cleanNum(v) : '';
+        else out[k] = /[A-Za-zÄÖÜäöü]{2}/.test(v) ? v.slice(0, 30) : ''; });
+    }
+  }
+
+  // -- Referenzklima: Ist-Spalte zwischen Kenndaten und Standortklima ------
+  if (sk && kd){
+    const band = above.filter(i => i.y < kd.y0 - 8.5*kd.pitch && i.y > skTop + e && (/^-?\d+,\d+$/.test(i.s) || isDash(i.s)));
+    const cols = colsByRight(band).sort((a,b) => b.length - a.length || a[0].r - b[0].r);
+    const run = cols.length ? runs(cols[0])[0] : [];
+    const keys = RK[sk.type];
+    if (run.length === keys.length && /,\d\d$/.test(run[run.length-1].s))
+      keys.forEach((k,i) => { out[k] = isDash(run[i].s) ? '' : cleanNum(run[i].s); });
+  }
+  if (sk){
+    out.kategorie = sk.type === 'WG' ? 'Wohngebäude' : 'Nichtwohngebäude';
+    out.ausgabe = 'April 2019';                  // 15/20-Zeilen-Raster mit eAWZ WW/RH/H gibt es nur in OIB 2019
+  }
+
+  // -- Deckblatt (Seite 1 des Ausweises, vor Seite 2) -------------------------
+  const DB = [['','ea_art'], ['','baujahr'], ['nutzungsprofil','letzte_veraenderung'],
+              ['adresse','kg'], ['plz_ort','kg_nr'], ['gstnr','seehoehe']];
+  for (const [l, rr] of DB){ if (l) out[l] = ''; out[rr] = ''; }
+  let letters = null;
+  for (let p = page-1; p >= 1 && p >= page-3; p--){
+    const b = body(pg.get(p) || []);
+    let plz = null, ort = '';
+    for (const i of b){
+      const m = i.s.match(/^(\d{4})(?:\s+(\D.*))?$/); if (!m) continue;
+      const o = m[2] || rowText(b, i.y, i.r + 1, i.r + 120);
+      if (/^[A-ZÄÖÜ]/.test(o)){ plz = i; ort = o; break; }
+    }
+    if (!plz) continue;
+    // rechte Spalte: dichteste Kante linker Wertanfänge rechts der Ort-Zelle
+    const win = b.filter(i => i.y > plz.y - 70 && i.y < plz.y + 140);
+    const right = colsByRight(win.filter(i => i.x > plz.x + 200).map(i => ({...i, r: i.x})))
+      .sort((a,c) => c.length - a.length)[0] || [];
+    const R = right.length >= 2 ? right[0].x : null;
+    // Zeilenraster: Median der Abstände benachbarter Zeilen (Zeilen leicht unregelmäßig)
+    const ys = [];
+    for (const y of win.filter(i => Math.abs(i.x-plz.x) < 3 || (R !== null && Math.abs(i.x-R) < 3)).map(i => i.y).sort((a,c) => c-a))
+      if (!ys.length || ys[ys.length-1] - y > 4) ys.push(y);
+    const dif = ys.slice(1).map((y,i) => ys[i]-y).sort((a,c) => a-c);
+    const pitch = dif[dif.length >> 1];
+    if (!(pitch >= 14 && pitch <= 35)) continue;
+    const slot = y => { const k = Math.round((plz.y - y)/pitch);
+      return Math.abs(plz.y - k*pitch - y) <= pitch*0.3 ? 4 + k : -1; };
+    const cellL = k => b.filter(i => Math.abs(i.x-plz.x) < 3 && slot(i.y) === k).map(i => i.s).join(' ').trim();
+    const cellR = k => R === null ? '' : b.filter(i => Math.abs(i.x-R) < 3 && slot(i.y) === k).map(i => i.s).join(' ').trim();
+    out.plz_ort = (plz.s.slice(0,4) + ' ' + ort).slice(0, 40);
+    out.nutzungsprofil = cellL(2).slice(0, 60);
+    out.adresse = cellL(3).slice(0, 72);
+    out.gstnr = /\d/.test(cellL(5)) ? cellL(5).slice(0, 40) : '';
+    out.ea_art = /^[A-Za-zÄÖÜ]/.test(cellR(0)) ? cellR(0).slice(0, 28) : '';
+    out.baujahr = (cellR(1).match(/^(?:1[5-9]|20)\d{2}$/) || [''])[0];
+    out.letzte_veraenderung = /(?:18|19|20)\d{2}/.test(cellR(2)) ? cellR(2).slice(0, 40) : '';
+    out.kg = /^[A-ZÄÖÜ]/.test(cellR(3)) ? cellR(3).slice(0, 28) : '';
+    out.kg_nr = /^\d{3,6}$/.test(cellR(4)) ? cellR(4) : '';
+    out.seehoehe = cleanNum((cellR(5).match(/^(\d{1,3}(?:[ .]\d{3})*(?:,\d+)?|\d+(?:,\d+)?)\s*m?$/) || ['',''])[1]);
+    // Klassenbuchstaben der Effizienzskala: genau vier, nach x = HWB PEB CO2 fGEE
+    const L = [];
+    for (const i of b.filter(i => i.y < plz.y - 2*pitch).sort((a,c) => a.x-c.x)){
+      if (/^\+{1,2}$/.test(i.s) && L.length && i.x - L[L.length-1].r < 30 && Math.abs(i.y - L[L.length-1].y) <= 3)
+        L[L.length-1] = {...L[L.length-1], s: L[L.length-1].s + i.s, r: i.r};
+      else if (/^[A-G]\+{0,2}$/.test(i.s)) L.push(i);
+    }
+    if (L.length === 4) letters = {hwb: L[0].s, fgee: L[3].s};
+    break;
+  }
+  // Klasse: gedruckter Buchstabe, sonst aus HWB_Ref,SK/fGEE (Grenzen OIB RL6 normativ fix);
+  // Gegenprobe Buchstabe vs. Wert wie deckblattKlassen() (±0,5 % an der Bandgrenze).
+  const band = (v, g) => { const n = parseFloat(v); if (!isFinite(n)) return '';
+    const K = ['A++','A+','A','B','C','D','E','F']; for (let i=0;i<g.length;i++) if (n <= g[i]) return K[i]; return 'G'; };
+  const HG = [10,15,25,50,100,150,200,250], FG = [0.55,0.70,0.85,1.00,1.75,2.50,3.25,4.00];
+  out.hwb_klasse  = (letters && letters.hwb)  || band(out.hwb_ref_sk, HG);
+  out.fgee_klasse = (letters && letters.fgee) || band(out.fgee, FG);
+  const clash = (v, l, g) => v && l && ![1, 0.995, 1.005].some(f => band(parseFloat(v)*f, g) === l);
+  const kc = [clash(out.hwb_ref_sk, letters && letters.hwb, HG) ? 'HWB' : '', clash(out.fgee, letters && letters.fgee, FG) ? 'fGEE' : ''].filter(Boolean);
+  out.pruefen = kc.length ? 'Deckblatt ≠ Formularwert (' + kc.join(', ') + ')' : '';
+  return out;
+}
+
 function extract(text, linePos){
   // Mac-erzeugte PDFs (ArchiPHYSIK) liefern z.T. Latin-1-Bytes MacRoman-dekodiert
   // ("W‰rmepumpe", "kWh/m≤a"). ‰/¸/ˆ vor Kleinbuchstaben kommt in echtem Text nicht
@@ -1518,6 +1757,9 @@ function extract(text, linePos){
       if (/[A-Za-z]{3}/.test(up) && !/^ERSTELLT/i.test(up)){ r.aussteller = up.slice(0,60); break; }
     }
   }
+  // ArchiPHYSIK-2019-Formular ohne Labels im Textlayer: Formularplätze schlagen
+  // die generischen Treffer (die dort nur Datenblatt/Anhang erreichen).
+  Object.assign(r, apLabellos(pos, text, s => moji ? s.replace(/[ƒ‰ˆ¸‹÷ﬂ≤≥∞]/g, c => MOJI[c]) : s) || {});
   // Aufräumen + Zahlen normalisieren
   for (const k in r){ if (typeof r[k]==='string') r[k] = r[k].replace(/\s+/g,' ').trim(); }
   // nur noch rohe Komma-Werte (Regex-Pfade wie LEK) nachnormalisieren — ein
@@ -1712,7 +1954,7 @@ async function pdfToText(file){
         lastX = part.x + part.s.length*5;
       }
       text += line+'\n';
-      linePos.push({page:p, parts});
+      linePos.push({page:p, y, parts});            // y = Zeilen-Bucket (Formular-Raster, apLabellos)
     }
     text += '\n';
     linePos.push({page:p, parts:[]});
