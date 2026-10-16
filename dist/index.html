@@ -522,14 +522,16 @@ function metricSK(lines, abbr){
 }
 
 // Ist das überhaupt ein Energieausweis? (sonst überspringen)
-function isEnergieausweis(text){
+// linePos (optional): ArchiPHYSIK-2019-Formular ohne Labels (apLabellos) hat im
+// Textlayer kein einziges Stichwort — dort entscheidet das Formularraster.
+function isEnergieausweis(text, linePos){
   const t = text.toLowerCase(); let s = 0;
   if (/energieausweis/.test(t)) s += 2;
   if (/heizw[äa]rmebedarf|\bhwb\b/.test(t)) s++;
   if (/gesamtenergieeffizienz|\bfgee\b/.test(t)) s++;
   if (/oib[\s\-]?richtlinie\s*6|prim[äa]renergie|\bpeb\b|eavg\b|gebäude-kenndaten/i.test(t)) s++;
   if (/kwh\/m²a|kwh\/m2a/.test(t)) s++;
-  return s >= 2;
+  return s >= 2 || !!(linePos && /ArchiPHYSIK/.test(text) && (apLabellos(linePos, text, x => x) || {}).kategorie);
 }
 
 // ============================================================================
@@ -2098,7 +2100,7 @@ async function runScan(list){
         // Kein Textlayer -> gescannt. In ENERGIE-Ordnern vermutlich ein Ausweis -> manuell, nicht skippen.
         row.status = 'MANUELL · kein Text (Scan?)';
         results[i] = row;
-      } else if (!isEnergieausweis(text)){
+      } else if (!isEnergieausweis(text, linePos)){
         // Hat Text, ist aber offensichtlich kein Energieausweis -> überspringen.
         results[i] = null;
       } else {

@@ -173,7 +173,7 @@ function loadBaseline(p) {
 			console.log(`${base} FEHLER: ${e.message}`);
 			continue;
 		}
-		if (!isEnergieausweis(text)) {
+		if (!isEnergieausweis(text, linePos)) {
 			console.log(`${base} ÜBERSPRUNGEN (kein Energieausweis)`);
 			continue;
 		}
