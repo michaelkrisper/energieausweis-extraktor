@@ -175,6 +175,18 @@ Autofilter, echte Zahlen). Nur die ersten 14 Seiten werden gelesen.
   - direkter Regex über `reText(text, re)` für Datum, OIB-Ausgabe, Klassen; `dateNear()` für Datum in
     der Folgezeile. Ein eawz-Block (`if (/AUSWEISUNG IN INSERATEN|FÖRDERANSUCHEN/)`) überschreibt die
     unsicheren Vorarlberg-Stapelspalten mit den sauberen Inserat-Kennzahlen.
+- **OIB-RL6 Ausgabe September 2025** (gilt in Wien ab 15.07.2026, Tirol ab 16.07.2026; noch keine
+  echten öffentlichen Ausweise, geprüft nur am RIS-Muster `LGBLA_TI_20260715_59` Anlage 6 inkl. mit
+  Ziffern befüllter Platzhalter): erkannt an „Ausgabe: September 2025" bzw. am Zitat „Richtlinie (EU)
+  2024/1275" (`OIB2025`). Dort gibt es keinen fGEE (`fgee`/`fgee_rk`/`fgee_klasse` bleiben leer), die
+  Skala ist A–G mit neuen Grenzen (HWB Ref,SK A ≤ 40 … G > 120, EEB-Klasse mit Zusatz „fossil"; Klasse A
+  nur dekarbonisiert) → KEIN Rechen-Fallback und kein Band-Kreuzcheck, nur gedruckte Buchstaben
+  (`hwb_klasse` folgt dann der neuen Skala — `ausgabe` sagt welche). Das OIB-Formularraster ist für 2025
+  aus (anderes Kenndaten-Raster). Labelvarianten: „Ersteller" (nur 2025, IfEA-Deckblätter nutzen
+  „Ersteller:" als Adresskopf), „Bemessungstemperatur (Heizfall)" → `soll_innen`, „Art der
+  Lüftungsanlage", Grenzwert-Subskripte „EEBzul,RK"/„HWBRef,Bem,RK"/„…,max,RK", Einheit „kWh/m2a"
+  (wird längentreu zu „kWh/m²a"). Neue 2025-Kennzahlen (EEB-Klasse, Anteil am Standort erzeugter
+  erneuerbarer Energie, GWP LC) haben noch KEINE Spalten — erst mit echten Ausweisen nachziehen.
 - `isEnergieausweis(text)` — Punkte-Schwelle (≥2); darunter wird die Datei übersprungen (in ENERGIE-
   Ordnern liegen auch fremde PDFs).
 - **Mojibake-Reparatur:** PDFs aus einem Ghostscript-Druckpfad (PDF24 Creator; Beleg `proholz_2019_nwg`:

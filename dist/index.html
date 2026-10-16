@@ -485,8 +485,13 @@ function byLabel(lines, labelRe, opt){
         if (opt.unit){ const u = numBeforeUnit(search, opt.unit); if (okv(u)) return u; }
         // einheitslos nur im zweiten Durchgang und nicht nach Prosa/Inhaltsverzeichnis
         // (kleingeschriebenes Wort direkt hinter dem Label)
+        // Ein angeklebtes Folgelabel beendet den Wert ("Gebäude-Hüllfläche (A)#.###,# m²
+        // Bemessungstemperatur (Heizfall)20,0 °C" -> 20,0 gehört zum Folgelabel)
         if (!strict && !/^[a-zäöüß]{3,}\s/.test(rest)){
-          const n = firstNum(rest) || firstNum(nx[0]||'') || firstNum(nx[1]||''); if (okv(n)) return n;
+          // "1/m" ist Einheit, keine Zahl (leeres Feld "#,## 1/m")
+          const u1 = s => s.replace(/\b1\/m\b/g, '');
+          const own = rest.replace(/(?<=[^\s(])[A-ZÄÖÜ][a-zäöüß]{3,}.*$/, '');
+          const n = firstNum(u1(own)) || (own === rest ? firstNum(u1(nx[0]||'')) || firstNum(u1(nx[1]||'')) : ''); if (okv(n)) return n;
         }
         // GEQ stellt manche Werte in die Zeile ÜBER das Label
         if (opt.up && lines[l-1]){
@@ -581,6 +586,13 @@ function extract(text, linePos){
     text = text.replace(/Strafle/g,'Straße').replace(/Auflen/g,'Außen').replace(/Grofl/g,'Groß');
   }
   text = text.replace(/[−–‐‑]/g,'-'); // Unicode-Minus/Bindestriche -> ASCII '-'
+  // "kWh/m2a" statt "kWh/m²a" (OIB-2025-Muster im Ergebnisblock) -> längentreu
+  // vereinheitlichen, in Text UND Positionsdaten (sonst greift keine Einheit)
+  const M2 = s => s.replace(/(kWh|kg|MJ)\/m2a/g, '$1/m²a').replace(/(kWh|kg|MJ)\/m3a/g, '$1/m³a');
+  if (/(?:kWh|kg|MJ)\/m[23]a/.test(text)){
+    text = M2(text);
+    if (linePos) linePos = linePos.map(lp => ({page: lp.page, parts: lp.parts.map(p => Object.assign({}, p, {s: M2(p.s)}))}));
+  }
   // Foxit Reader PDF Printer (laendleimmo) liefert U+0000 statt Leerzeichen
   // ("Nr.\u000088340-1") -> \s und die Zellen-Logik griffen dort nie.
   if (text.indexOf('\u0000') >= 0){
@@ -601,6 +613,12 @@ function extract(text, linePos){
   r.ausgabe      = reText(text, /Ausgabe:?\s*((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
                  || reText(text, /(?:OIB[- ]?)?(?:Richtlinie|RL)\.?\s*6[^\n]{0,45}?((?:J[äa]nner|Januar|Februar|M[äa]rz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(?:19|20)\d{2})/i)
                  || reText(text, /(?:Richtlinie|RL)\.?\s*6\s*(?:Ausgabe:?\s*)?((?:19|20)\d{2})/i);
+  // OIB-RL6 Ausgabe September 2025 (gilt in Wien ab 15.07.2026, Tirol ab 16.07.2026):
+  // kein fGEE mehr (ersetzt durch die EEB-Klasse), Skala A–G mit neuen Grenzen
+  // (HWB Ref,SK A ≤ 40 … G > 120; Klasse A nur dekarbonisiert, sonst "…fossil"),
+  // neues Kenndaten-Raster. Erkennbar an der Ausgabe bzw. am Zitat der EU-
+  // Gebäuderichtlinie 2024/1275 (2015–2023 zitieren 2010/31/EU).
+  const OIB2025 = /September\s+2025/.test(r.ausgabe) || /Richtlinie\s*\(EU\)\s*2024\/1275/.test(text);
   r.adresse      = byLabel(lines, /^(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse)\b/i, {max:72, atStart:true})
                  || byLabel(lines, /\b(?:Geb[äa]udeadresse|Objektadresse|Stra[ßs]e|Liegenschaftsadresse|Liegenschaft|Adresse)\b/i, {max:72})
                  // nur als Label am Zellenanfang ("Objekt   Wohnanlage Rautenweg 11"), nicht
@@ -647,13 +665,14 @@ function extract(text, linePos){
   // ("Wohnen  Knittelfeld" / "Gebäudezone   Katastralgemeinde") — greift byLabel
   // dort das nächste LABEL ab, per Zellenindex aus der Vorzeile korrigieren.
   // ArchiPHYSIK 25 dito, byLabel greift dort die PLZ der Folgezeile ("1150").
+  if (/^(?:Letzte\s+Ver|Baujahr|Nutzungsprofil|Umsetzungsstand)/i.test(r.kg)) r.kg = '';   // leer gedrucktes Feld
   if (!r.kg || /^(Stra[ßs]e|KG-?N|Einlagezahl|Grundst|\d)/i.test(r.kg)){
     for (let l=1;l<lines.length;l++){
       const cs0 = cells(lines[l]); const idx = cs0.findIndex(c=>/^Katastralgemeinde\s*$/i.test(c));
       if (idx < 0) continue;
       const up = cells(lines[l-1]||'');
       const cand = up[idx] || '';
-      if (/^[A-ZÄÖÜ][a-zäöüß]/.test(cand) && !/Baujahr|Erbaut|Nutzung|Wohnen/i.test(cand)){ r.kg = cand.slice(0,28); break; }
+      if (/^[A-ZÄÖÜ][a-zäöüß]/.test(cand) && !/Baujahr|Erbaut|Nutzung|Wohnen|Letzte|Umsetzung/i.test(cand)){ r.kg = cand.slice(0,28); break; }
     }
   }
   r.kg_nr        = byLabel(lines, /KG-?N(?:r\.?|ummer)/i, {max:12});
@@ -741,7 +760,7 @@ function extract(text, linePos){
     if (v){ r.letzte_veraenderung = v; break; }
   }
   if (!/(?:18|19|20)\d{2}/.test(r.letzte_veraenderung)) r.letzte_veraenderung = '';
-  r.lueftung     = byLabel(lines, /Art der L[üu]ftung/i, {max:28});
+  r.lueftung     = byLabel(lines, /Art der L[üu]ftung(?:sanlage)?/i, {max:28});   // OIB 2025: "…Lüftungsanlage"
   // "Mischsystem" (eawz/ArchiPHYSIK: Fenster- + mechanische Lüftung) ist ein gültiger Wert
   if (!/l[üu]ftung|WRG|mechanisch|natürlich|Mischsystem/i.test(r.lueftung)) r.lueftung = byLabel(lines, /\bL[üu]ftung\b/i, {max:28});
   if (!/l[üu]ftung|WRG|mechanisch|natürlich|Mischsystem/i.test(r.lueftung)) // Wert steht z.T. über/neben dem Label
@@ -755,6 +774,8 @@ function extract(text, linePos){
                 || numAboveLabel(/mittlerer\s+U-?Wert/i);
   r.klimaregion  = byLabel(lines, /Klimaregion/i, {max:24})
                    .replace(/\s*(mittlerer|Bauweise|Heiztage|Heizgradtage|Norm|Art der|Soll-|Photovoltaik|Solarthermie|Stromspeicher|EA-?Art|LEK).*$/i,'').trim();
+  // Überschrift statt Wert (Feld leer gedruckt, OIB-2025-Muster: "SPEZIFISCHER …")
+  if (/^[A-ZÄÖÜ]{5,}/.test(r.klimaregion)) r.klimaregion = '';
   r.seehoehe     = byLabel(lines, /Seeh[öo]he/i, {num:true, unit:'m', ok:rng(100, 4000)}) || numAboveLabel(/Seeh[öo]he/i);
   // "Heizgradtage 14/22  3946" (eawz): Heizgrenze/Innentemperatur gehören zum Label
   r.heizgradtage = byLabel(lines, /Heizgradtage(?:\s*\d{2}\s*\/\s*\d{2}(?!\d))?/i, {num:true, unit:'K', ok:rng(1000, 9000)});
@@ -765,7 +786,8 @@ function extract(text, linePos){
     r.norm_aussen = numAboveLabel(/Norm-?Au[sß]+entemperatur/i) || (parseFloat(r.norm_aussen) > 0 ? '' : r.norm_aussen);
   r.heiztage     = byLabel(lines, /Heiztage/i, {num:true, unit:'d', ok:rng(0, 366)});
   r.huellflaeche = byLabel(lines, /Geb[äa]ude-?H[üu]llfl[äa]che/i, {num:true, unit:'m²', ok:rng(5, 5e6)});
-  r.soll_innen   = byLabel(lines, /Soll-?Innentemperatur/i, {num:true, unit:'°C', ok:rng(5, 35)});
+  // OIB 2025 heißt sie "Bemessungstemperatur (Heizfall)"
+  r.soll_innen   = byLabel(lines, /Soll-?Innentemperatur|Bemessungstemperatur\s*\(\s*Heizfall\s*\)/i, {num:true, unit:'°C', ok:rng(5, 35)});
   // Bauweise: Wert direkt nach dem Label ("Bauweise  schwer") oder adjektivisch
   // im Fließtext ("schwere Bauweise", ältere Layouts) — nur bekannte Klassen.
   r.bauweise     = reText(text, /Bauweise\s*[: ]\s*((?:sehr\s+)?(?:mittelschwer|leicht|mittel|schwer))/i)
@@ -777,7 +799,7 @@ function extract(text, linePos){
   r.rh_system    = byLabel(lines, /RH-?WB-?System\s*\(?\s*prim[^)]*\)?/i, {max:30});
   r.kuehlsystem  = byLabel(lines, /Kältebereitstellungs-?System/i, {max:30});
   for (const k of ['ww_system','rh_system','kuehlsystem'])
-    if (!/[A-Za-zÄÖÜäöü]{2}/.test(r[k]) || /WB-?System|LEK|Bauweise|Teil-|charakterist|L[äa]nge/i.test(r[k])) r[k]='';
+    if (!/[A-Za-zÄÖÜäöü]{2}/.test(r[k]) || /WB-?System|LEK|Bauweise|Teil-|charakterist|L[äa]nge|W[äa]rmeverteilsystem|Ja \/ Nein|(?:Ja|Nein)$|[üu]berwachung/i.test(r[k])) r[k]='';
   // Solarthermie/PV: Zahl+Einheit muss auf der Label-Zeile NACH dem Label stehen
   // ("Solarthermie  - m²" bleibt leer; Tabellen ohne Einheit greifen nicht).
   function afterLabelNum(labelRe, unit){
@@ -1115,7 +1137,8 @@ function extract(text, linePos){
     for (const d of [0,-1,1]){
       if (!pos[l+d] || pos[l+d].page !== pos[l].page) continue;
       const m = xmap(l+d); if (!m) continue;
-      const re = /,\s*zul\b|zul[äa]ssig|,\s*max\b/gi;
+      // OIB 2025 auch "EEBzul,RK" (ohne Komma) und "HWBRef,Bem,RK" (Bemessungswert)
+      const re = /,\s*zul\b|(?<=[A-Z])zul\b|zul[äa]ssig|,\s*(?:max|Bem)\b/g;
       for (let g; (g = re.exec(m.s)) !== null; ) if (m.cx[g.index] !== undefined) out.push(m.cx[g.index]);
     }
     return out;
@@ -1441,7 +1464,8 @@ function extract(text, linePos){
   // passiert hier nichts), nur für leere Felder, nur in Zeilen mit eigenem Label
   // oder direkt unter einer solchen, nie in eine Zelle mit fremdem Label (anderes
   // Formular: IfEA-Übersicht "Nutzungsprofil…Baujahr 1903") und nur mit plausiblem Wert.
-  if (pos){
+  // OIB 2025 hat ein anderes Kenndaten-Raster -> dort nicht anwenden.
+  if (pos && !OIB2025){
     const T_KOPF = {
       rows: [[/BEZEICHNUNG/, /Umsetzungsstand|EA-?Art/], [/Geb[äa]ude\s*\(?-?\s*teil/, /Baujahr/],
              [/Nutzungsprofil/, /Letzte\s+Ver/], [/Stra[ßs]e/, /Katastralgemeinde/], [/PLZ/, /KG-?N/],
@@ -1459,7 +1483,7 @@ function extract(text, linePos){
                [null,'lek','rh_system'], [null,'bauweise',null], [null,null,'kuehlsystem']]};
     // Wertprüfung je Feld (Zahl im Plausibilitätsbereich bzw. Text mit Inhalt)
     const N = (a, b) => t => { const v = firstNum(t); return v !== '' && +v >= a && +v <= b ? v : ''; };
-    const TXT = t => /[A-Za-zÄÖÜäöü]{2}/.test(t) && !/^-+$/.test(t) ? t : '';
+    const TXT = t => /[A-Za-zÄÖÜäöü]{2}/.test(t) && !/^-+$/.test(t) && !/Ja\s*\/\s*Nein/.test(t) ? t : '';
     const PARSE = {bgf:N(5,5e6), bezugsflaeche:N(5,5e6), bruttovolumen:N(10,5e7), huellflaeche:N(5,5e6),
       heiztage:N(0,366), heizgradtage:N(1000,9000), norm_aussen:N(-40,0), soll_innen:N(5,35), kompaktheit:N(0.02,3),
       char_laenge:N(0.2,40), u_mittel:N(0.03,6), lek:N(0.5,500), seehoehe:N(100,4000), solarthermie:N(0,1e5),
@@ -1847,7 +1871,8 @@ function extract(text, linePos){
     }
     return '';
   }
-  r.fgee     = fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?(\d+,\d+)/i)||[])[1] || '' ;
+  // OIB 2025 kennt keinen fGEE (Definition von OIB2025 oben bei der Ausgabe)
+  r.fgee     = OIB2025 ? '' : fgeeIn('SK') || fgeeIn('any') || (fg.match(/f\s*GEE[^\n]{0,30}?(\d+,\d+)/i)||[])[1] || '' ;
   // ETU/Vatter-Layout: fGEE-Zeile ohne Token, nur "=  0,71  0,74" (SK  Anforderung)
   if (!r.fgee && /GESAMTENERGIEEFFIZIENZ-?FAKTOR/i.test(text)){
     for (const ln of lines){ const m = ln.match(/^\s*=\s*(\d+,\d+)\s+\d+,\d+\s*$/); if (m){ r.fgee = cleanNum(m[1]); break; } }
@@ -1860,7 +1885,7 @@ function extract(text, linePos){
     if (m && parseFloat(cleanNum(m[1])).toFixed(1) === parseFloat(r.fgee).toFixed(1)) r.fgee = cleanNum(m[1]);
   }
   const fgeeSkLine = fgeeIn.last;
-  r.fgee_rk  = fgeeIn('RK');
+  r.fgee_rk  = OIB2025 ? '' : fgeeIn('RK');
   // Nur verwerfen, wenn RK vom SELBEN Fund stammt (sec[]-Fehlzuordnung) —
   // echte Ausweise dürfen fGEE,RK == fGEE,SK haben (z.B. ECOTECH 2015).
   if (r.fgee_rk && r.fgee_rk===r.fgee && fgeeIn.last===fgeeSkLine) r.fgee_rk='';
@@ -1889,7 +1914,7 @@ function extract(text, linePos){
   // nur der Skalen-BUCHSTABE je Kennzahl, spaltenweise unter dem Kopf
   // "HWB  PEB  CO2  fGEE". Über die x-Position je Spalte gelesen: bessere Quelle
   // als der Rechen-Fallback UND Gegenprobe gegen die Tabellen-Extraktion.
-  const KLBUCHST = /^[A-G]\+{0,2}$/;
+  const KLBUCHST = /^[A-G](?:\+{0,2}|fossil)$/;   // OIB 2025: "Cfossil"
   function deckblattKlassen(){
     if (!pos) return null;
     // Kopfzeile: darf NUR aus Kennzahl-/Index-Tokens bestehen (sonst trifft man
@@ -1897,7 +1922,7 @@ function extract(text, linePos){
     // Die Kopfzeile ist im Textlayer in Einzel-Items zerlegt ("HWB" | "Ref,SK" |
     // "PEB" | "SK" | "CO" | "2eq,SK" | "f" | "GEE") — jedes Item muss ein
     // Kennzahl- oder Index-Token sein, sonst ist es keine Deckblatt-Kopfzeile.
-    const TOK = /^(?:HWB\*?(?:Ref,?)?\s*(?:SK)?|PEB\s*(?:SK)?|CO\s*2?(?:eq)?,?\s*(?:SK)?|f(?:\s*GEE)?,?\s*(?:SK)?|GEE,?\s*(?:SK)?|Ref,?\s*SK|SK|2(?:eq)?,?\s*(?:SK)?)$/i;
+    const TOK = /^(?:HWB\*?(?:Ref,?)?\s*(?:SK)?|PEB\s*(?:SK)?|EEB\s*(?:SK)?|Ref,\s*SK|CO\s*2?(?:eq)?,?\s*(?:SK)?|f(?:\s*GEE)?,?\s*(?:SK)?|GEE,?\s*(?:SK)?|Ref,?\s*SK|SK|2(?:eq)?,?\s*(?:SK)?)$/i;
     for (let l=0; l<lines.length && l<pos.length; l++){
       const parts = pos[l].parts.filter(p=>p.s.trim());
       if (parts.length < 2 || !parts.every(p=>TOK.test(p.s.trim()))) continue;
@@ -1907,6 +1932,7 @@ function extract(text, linePos){
         const t = p.s.trim();
         if (/^HWB/i.test(t)) put('hwb', p.x);
         else if (/^PEB/i.test(t)) put('peb', p.x);
+        else if (/^EEB/i.test(t)) put('eeb', p.x);
         else if (/^CO/i.test(t)) put('co2', p.x);
         else if (/^f/i.test(t)) put('fgee', p.x);
       }
@@ -1941,9 +1967,11 @@ function extract(text, linePos){
   // gedruckte Klasse außerhalb des Deckblatts (eawz-Inserat "249,16 (F)") für die
   // Plausibilitätsprüfung merken, bevor der Rechen-Fallback die Lücke füllt
   const klDruck = {hwb: r.hwb_klasse, fgee: r.fgee_klasse};
-  // Buchstabe aus dem Dokument schlägt den Rechen-Fallback.
-  r.hwb_klasse  = r.hwb_klasse  || dbk.hwb  || klasse(r.hwb_ref_sk || r.hwb, HWB_GRENZEN);
-  r.fgee_klasse = r.fgee_klasse || dbk.fgee || klasse(r.fgee, FGEE_GRENZEN);
+  // Buchstabe aus dem Dokument schlägt den Rechen-Fallback. OIB 2025: KEIN Rechen-
+  // Fallback — die Skala der Ausgaben 2015–2023 gilt dort nicht, und ob Klasse A
+  // erreichbar ist, hängt am Energieträger (dekarbonisiert/fossil) -> nur gedruckt.
+  r.hwb_klasse  = r.hwb_klasse  || dbk.hwb  || (OIB2025 ? '' : klasse(r.hwb_ref_sk || r.hwb, HWB_GRENZEN));
+  r.fgee_klasse = OIB2025 ? '' : r.fgee_klasse || dbk.fgee || klasse(r.fgee, FGEE_GRENZEN);
   // Kreuzcheck: fällt der extrahierte Wert in ein anderes Band als der gedruckte
   // Buchstabe, stimmt die Tabellen-Extraktion vermutlich nicht. Werte NICHT
   // überschreiben — nur markieren (Designprinzip: lieber prüfen als still falsch).
@@ -1955,7 +1983,7 @@ function extract(text, linePos){
     if ([n, n*0.995, n*1.005].some(x => klasse(x, grenzen) === letter)) return '';
     return klasse(n, grenzen) + '≠' + letter;
   }
-  const konflikt = [
+  const konflikt = OIB2025 ? [] : [
     ['HWB',  bandKonflikt(r.hwb_ref_sk || r.hwb, dbk.hwb,  HWB_GRENZEN)],
     ['fGEE', bandKonflikt(r.fgee,                dbk.fgee, FGEE_GRENZEN)],
   ].filter(k => k[1]).map(k => k[0] + ' ' + k[1]);
@@ -2014,7 +2042,11 @@ function extract(text, linePos){
     }
   }
   // "ErstellerIn Nummer: (keine)" ist die Ersteller-NUMMER, nicht der Name.
-  r.aussteller  = byLabel(lines, /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)|erstellt durch/i, {max:60});
+  // OIB 2025: "Ersteller" ohne Binnen-I (nur dort — IfEA-Deckblätter führen
+  // "Ersteller:" als Kopf eines Adressblocks)
+  const ERST = OIB2025 ? /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)|Ersteller(?![\w:-])(?!\s+Nummer)/
+                       : /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)/;
+  r.aussteller  = byLabel(lines, new RegExp(ERST.source + '|erstellt durch', 'i'), {max:60});
   // ArchiPHYSIK setzt das Label ans Zeilenende ("GWR-Zahl  k. A.  ErstellerIn")
   // und den Namen in die Folgezeile.
   if (!r.aussteller){
@@ -2042,7 +2074,7 @@ function extract(text, linePos){
   // "… GmbH & Co" / "KG"), höchstens zwei, ohne Ziffer — darunter folgt die
   // Anschrift mit Hausnummer/PLZ.
   {
-    const LBL = /Ausstellerin|Aussteller|ErstellerIn(?!-?Nr)(?!\s+Nummer)/;
+    const LBL = ERST;
     const LABELISH = /^(?:Organisation|Unterschrift|ERSTELLT|GWR|Ausstellungs|G[üu]ltigkeits|Gesch[äa]ftszahl|Stempel|ErstellerIn|Aussteller|EA-?Nr|EAW-?Nr)/i;
     const name = t => /[A-Za-zÄÖÜäöü]{2}/.test(t) && !LABELISH.test(t) && !NEXT_LABEL.test(t);
     let pv = '';
@@ -2111,7 +2143,7 @@ function extract(text, linePos){
       if (a && b && (a/b < lo || a/b > hi)) P.push(s+'/'+k+' '+fmt(a/b));
     }
     // (5) gedruckte Klasse (eawz-Inserat) ↔ Wert; Deckblatt-Buchstaben prüft der Kreuzcheck oben
-    const kh = bandKonflikt(r.hwb_ref_sk || r.hwb, klDruck.hwb !== dbk.hwb ? klDruck.hwb : '', HWB_GRENZEN);
+    const kh = OIB2025 ? '' : bandKonflikt(r.hwb_ref_sk || r.hwb, klDruck.hwb !== dbk.hwb ? klDruck.hwb : '', HWB_GRENZEN);
     const kf = bandKonflikt(r.fgee, klDruck.fgee !== dbk.fgee ? klDruck.fgee : '', FGEE_GRENZEN);
     if (kh) P.push('HWB-Klasse '+kh); if (kf) P.push('fGEE-Klasse '+kf);
     // (6) Datum: gültiger Kalendertag, Gültigkeit nach Ausstellung, höchstens 10 Jahre (EAVG)
