@@ -838,8 +838,10 @@ function extract(text, linePos){
     const town = byLabel(lines, /\bOrt\b/i, {max:30});
     if (zip) r.plz_ort = (zip+' '+town).trim();
   }
+  // Postcode and town on ONE line, not after a date: neither "12.03.2021  Gültigkeitsdatum"
+  // nor "Ausgabe: April 2019" + next line "Brutto-Grundfläche" is a postcode.
   if (!/\d{4}/.test(r.plz_ort))
-    r.plz_ort = reText(text, /\b(\d{4}\s+(?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|Stra[ßs]e|Erbaut|Baujahr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
+    r.plz_ort = reText(text, /(?<![\d.,/])\b(\d{4} (?!Nutzung|Bezeich|Logo|Letzte|Umsetz|Planung|Stand|Mehrfam|Baujahr|Einfam|Nutzfl|Seite|Version|Objekt|Erstell|Institut|Österr|Stra[ßs]e|Erbaut|Baujahr|KG)[A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ]?[a-zäöüß]+){0,2})/);
   r.kg           = byLabel(lines, /Katastralgemeinde/i, {max:28})
   // "Katastralgemeinde: 23421 Maiersdorf" — the KG number belongs in the KG-Nr. field,
   // the name is the text part. KG names never start with a digit.
