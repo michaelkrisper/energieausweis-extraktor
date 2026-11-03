@@ -1,71 +1,20 @@
 #!/usr/bin/env node
 /*
- * Validierungs-Harness — prüft die Extraktion gegen echte PDFs auf dem ENTWICKLER-Rechner.
- * Nutzt denselben pdf.js-Pfad und dieselbe extract()-Logik wie dist/index.html, damit das
- * Ergebnis dem Browser-Verhalten entspricht.
+ * Validation harness: checks the extraction against real PDFs on the developer machine.
+ * Uses the same pdf.js path and the same extract() logic as dist/index.html, so the result
+ * matches the browser.
  *
- *   npm i pdfjs-dist@6.1.200         # einmalig (nur Dev-Maschine, nicht der Firmen-PC)
- *   node test/validate.js <ordner-mit-pdfs>     # default: test/samples
+ *   npm install                                  # once (dev machine only)
+ *   node test/validate.js [dir] [--baseline] [--jitter[=N]]   # default dir: test/samples
  *
- * Gibt pro PDF: ist-Energieausweis?, Feld-Abdeckung und die wichtigsten Werte.
+ * Per PDF: assert mode against <pdf>.expected.json if present, otherwise field coverage.
+ * Exit code 1 on any FAIL, MISS or jitter deviation.
  */
 const fs = require("node:fs");
 const path = require("node:path");
-// pdf.js 6 ist ESM -> dynamisch importieren (initPdfjs() vor dem ersten getDocument awaiten)
-let pdfjsLib;
-async function initPdfjs() {
-	pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.min.mjs");
-	pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
-		"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-	);
-}
+const { extract, isEnergyCertificate, pdfToText } = require("./engine");
 
-// extract()/isEnergieausweis() direkt aus dem Template ziehen (keine Code-Duplikation/Drift)
-const tpl = fs.readFileSync(
-	path.join(__dirname, "..", "src", "app.template.html"),
-	"utf8",
-);
-// eslint-disable-next-line no-eval
-eval(tpl.slice(tpl.indexOf("const NUM_KEYS"), tpl.indexOf("// ---- State")));
-
-// pdfToText 1:1 wie im Template (Zeilen-Rekonstruktion aus 2D-Positionen)
-async function pdfToText(buf, tweak) {
-	const task = pdfjsLib.getDocument({
-		data: buf,
-		useWorkerFetch: false,
-		isEvalSupported: false,
-	});
-	const doc = await task.promise;
-	const pages = doc.numPages;
-	let text = "";
-	const linePos = [];
-	for (let p = 1; p <= Math.min(pages, 14); p++) {
-		const tc = await (await doc.getPage(p)).getTextContent();
-		const items = [];
-		for (const it of tweak ? tweak(tc.items, p) : tc.items) {
-			if (!it.str || !it.transform) continue;
-			items.push({ x: it.transform[4], y: it.transform[5], w: it.width || 0, s: it.str });
-		}
-		for (const parts of groupLines(items)) {
-			let line = "",
-				lastX = null;
-			for (const pt of parts) {
-				if (lastX !== null && pt.x - lastX > 14) line += "  ";
-				line += pt.s;
-				lastX = pt.x + pt.s.length * 5;
-			}
-			text += `${line}\n`;
-			const y = Math.max(...parts.map((q) => q.y));
-			linePos.push({ page: p, y, parts });
-		}
-		text += "\n";
-		linePos.push({ page: p, parts: [] });
-	}
-	await task.destroy();
-	return { text, pages, linePos };
-}
-
-// Felder für den Coverage-Fallback (PDFs OHNE .expected.json)
+// Fields for coverage mode (PDFs WITHOUT .expected.json)
 const FIELDS = [
 	"ausgabe",
 	"plz_ort",
@@ -87,15 +36,17 @@ const FIELDS = [
 	"aussteller",
 ];
 
-// ---- Assert-Modus -----------------------------------------------------------
-// Vergleicht extract()-Ist gegen handgelesene Soll-Werte aus <pdf>.expected.json.
-// Keys mit "_"-Präfix sind Metadaten (Quelle/Ausgabe/Layout), keine Soll-Felder.
-// Werte werden vor dem Vergleich normalisiert (Zahlenkomma->Punkt, Whitespace),
-// damit "45,6" == "45.6" und "1 230" == "1230" als gleich gelten.
+// ---- Assert mode ------------------------------------------------------------
+// Compares extract() output with hand-read expected values from <pdf>.expected.json.
+// Keys with a "_" prefix are metadata (source/edition/layout), not expected fields.
+// Values are normalised before comparison (decimal comma -> point, whitespace),
+// so "45,6" == "45.6" and "1 230" == "1230".
 
 function norm(v) {
-	let s = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
-	// reine Zahl (evtl. mit Tausendertrenner / Komma) auf Punkt-Form bringen
+	const s = String(v == null ? "" : v)
+		.replace(/\s+/g, " ")
+		.trim();
+	// plain number (possibly with thousands separator / comma) -> point form
 	const numlike = s.replace(/[ .](?=\d{3}\b)/g, ""); // 1.230 / 1 230 -> 1230
 	if (/^-?\d+(?:[.,]\d+)?$/.test(numlike.replace(",", "."))) {
 		let n = numlike.replace(",", ".");
@@ -110,27 +61,26 @@ function classify(expected, got) {
 	const res = { PASS: [], FAIL: [], MISS: [], EXTRA: [] };
 	for (const k of Object.keys(expected)) {
 		if (k.startsWith("_")) continue;
-		const soll = expected[k];
-		const ist = got[k] || "";
-		if (eq(soll, ist)) res.PASS.push(k);
-		else if (!ist) res.MISS.push(`${k}: soll=${soll}`);
-		else res.FAIL.push(`${k}: soll=${soll} ist=${ist}`);
+		const want = expected[k];
+		const have = got[k] || "";
+		if (eq(want, have)) res.PASS.push(k);
+		else if (!have) res.MISS.push(`${k}: expected=${want}`);
+		else res.FAIL.push(`${k}: expected=${want} got=${have}`);
 	}
 	return res;
 }
 
-// ---- Jitter (metamorpher Robustheitstest) ---------------------------------
-// --jitter[=N]: jedes PDF zusätzlich N-mal (Default 3) mit deterministisch
-// verschobenen pdf.js-Items lesen (Seed = Lauf + Dateiname). Modell (JMODE=page):
-// ganze Seite um ±0,5…1 Einheit in x und y versetzt (anderer Druckertreiber/
-// Seitenrand), je Item x-Rauschen ±JNX (0,3), zufällige Nachbartausche in der
-// Item-Reihenfolge. Das Ergebnis muss Feld für Feld dem unverschobenen Lauf
-// gleichen — sonst hängt eine Regel an einem brüchigen Schwellwert (Zeilenraster,
-// Spaltenlücke, Fensterbreite). Der Hook sitzt in pdfToText (tweak), die Zeilen-
-// rekonstruktion selbst bleibt 1:1 wie im Template. y-Rauschen je Item (JNY)
-// ist absichtlich aus: JEDE Zeilentoleranz hat Grundlinienabstände knapp daneben
-// (JNY=0,05: 1, JNY=0,15: 19 von 189 Läufen abweichend) — das misst die Kante
-// von LINE_TOL, nicht eine Regel. JMODE=item: unabhängiges Rauschen ±JX/±JY je Item.
+// ---- Jitter (metamorphic robustness test) ---------------------------------
+// --jitter[=N]: read every PDF N more times (default 3) with deterministically
+// shifted pdf.js items (seed = run + file name). Model (JMODE=page): whole page
+// shifted by ±0.5…1 unit in x and y (other printer driver / page margin), per-item
+// x noise ±JNX (0.3), random neighbour swaps in the item order. The result must
+// equal the unshifted run field by field — otherwise a rule depends on a brittle
+// threshold (line grid, column gap, window width). The hook sits in pdfToText
+// (tweak); the line reconstruction itself is identical to the template. Per-item
+// y noise (JNY) is deliberately off: EVERY line tolerance has baseline gaps right
+// next to it (JNY=0.05: 1, JNY=0.15: 19 of 189 runs differ) — that measures the
+// edge of LINE_TOL, not a rule. JMODE=item: independent noise ±JX/±JY per item.
 const JX = Number(process.env.JX || 1);
 const JY = Number(process.env.JY || 1);
 function mulberry32(a) {
@@ -151,9 +101,10 @@ const JNX = Number(process.env.JNX || 0.3);
 const JNY = Number(process.env.JNY || 0);
 function jitterTweak(seed, name) {
 	const rnd = mulberry32(hashStr(name) ^ Math.imul(seed, 0x9e3779b1));
-	const amp = (a) => (rnd() < 0.5 ? -1 : 1) * a * (0.5 + 0.5 * rnd()); // ±0,5a…a
+	const amp = (a) => (rnd() < 0.5 ? -1 : 1) * a * (0.5 + 0.5 * rnd()); // ±0.5a…a
 	return (items) => {
-		const px = amp(JX), py = amp(JY);
+		const px = amp(JX),
+			py = amp(JY);
 		const out = items.map((it) => {
 			if (!it.transform) return it;
 			const t = it.transform.slice();
@@ -187,7 +138,6 @@ function loadBaseline(p) {
 }
 
 (async () => {
-	await initPdfjs();
 	const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 	const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith("--")));
 	const jflag = [...flags].find((a) => /^--jitter(?:=\d+)?$/.test(a));
@@ -196,7 +146,7 @@ function loadBaseline(p) {
 	const dir = args[0] || path.join(__dirname, "samples");
 	const baselinePath = path.join(__dirname, "baseline.json");
 	if (!fs.existsSync(dir)) {
-		console.error(`Ordner nicht gefunden: ${dir}`);
+		console.error(`Directory not found: ${dir}`);
 		process.exit(1);
 	}
 	const pdfs = fs
@@ -204,7 +154,7 @@ function loadBaseline(p) {
 		.filter((f) => f.toLowerCase().endsWith(".pdf"))
 		.sort();
 	if (!pdfs.length) {
-		console.error(`Keine PDFs in ${dir}`);
+		console.error(`No PDFs in ${dir}`);
 		process.exit(1);
 	}
 	console.log(`${pdfs.length} PDF(s) in ${dir}\n`);
@@ -212,13 +162,13 @@ function loadBaseline(p) {
 		.readdirSync(dir)
 		.filter((f) => f.endsWith(".expected.json"))
 		.filter((f) => !fs.existsSync(path.join(dir, f.replace(/\.expected\.json$/, ".pdf"))));
-	for (const f of orphans) console.log(`Fixture ohne PDF (node test/fetch.js?): ${f}`);
+	for (const f of orphans) console.log(`Fixture without PDF (node test/fetch.js?): ${f}`);
 	if (orphans.length) console.log("");
 
 	let totPass = 0;
 	let totFail = 0;
 	let totMiss = 0;
-	const perPdf = {}; // name -> PASS-Quote für Baseline-Δ
+	const perPdf = {}; // name -> PASS count for the baseline delta
 	let anyAssert = false;
 
 	for (const f of pdfs) {
@@ -226,22 +176,23 @@ function loadBaseline(p) {
 		let text;
 		let linePos;
 		try {
-			({ text, linePos } = await pdfToText(
-				new Uint8Array(fs.readFileSync(path.join(dir, f))),
-			));
+			({ text, linePos } = await pdfToText(new Uint8Array(fs.readFileSync(path.join(dir, f)))));
 		} catch (e) {
-			console.log(`${base} FEHLER: ${e.message}`);
+			console.log(`${base} ERROR: ${e.message}`);
 			continue;
 		}
-		if (!isEnergieausweis(text, linePos)) {
-			console.log(`${base} ÜBERSPRUNGEN (kein Energieausweis)`);
+		if (!isEnergyCertificate(text, linePos)) {
+			console.log(`${base} SKIPPED (not an energy certificate)`);
 			continue;
 		}
 		const r = extract(text, linePos);
 		const expPath = path.join(dir, `${f.replace(/\.pdf$/i, "")}.expected.json`);
 		const jit = [];
 		for (let s = 1; s <= jitterRuns; s++) {
-			const j = await pdfToText(new Uint8Array(fs.readFileSync(path.join(dir, f))), jitterTweak(s, f));
+			const j = await pdfToText(
+				new Uint8Array(fs.readFileSync(path.join(dir, f))),
+				jitterTweak(s, f),
+			);
 			const d = diffFields(r, extract(j.text, j.linePos));
 			if (d.length) jit.push(`      JITTER seed ${s}: ${d.join("; ")}`);
 		}
@@ -267,7 +218,7 @@ function loadBaseline(p) {
 		} else {
 			const cov = FIELDS.filter((k) => r[k]).length;
 			console.log(
-				`${base}EA  ${String(cov).padStart(2)}/${FIELDS.length} Felder (keine Fixture)  ` +
+				`${base}EA  ${String(cov).padStart(2)}/${FIELDS.length} fields (no fixture)  ` +
 					`hwb=${r.hwb || "·"} fgee=${r.fgee || "·"} ausgabe="${r.ausgabe || "·"}" ${r.plz_ort || ""}`,
 			);
 		}
@@ -276,20 +227,20 @@ function loadBaseline(p) {
 
 	if (jitterRuns)
 		console.log(
-			`\nJITTER  ${jitterRuns} Läufe je PDF (${JMODE === "page" ? `Seitenversatz ±${JX}/±${JY}, Item-x ±${JNX}, y ±${JNY}` : `Item x ±${JX}, y ±${JY}`}): ` +
-				(jitterDiffs ? `${jitterDiffs} Läufe mit abweichendem Ergebnis` : "alle Ergebnisse stabil"),
+			`\nJITTER  ${jitterRuns} runs per PDF (${JMODE === "page" ? `page offset ±${JX}/±${JY}, item x ±${JNX}, y ±${JNY}` : `item x ±${JX}, y ±${JY}`}): ` +
+				(jitterDiffs ? `${jitterDiffs} runs with a different result` : "all results stable"),
 		);
-	if (!anyAssert) process.exit(jitterDiffs ? 1 : 0); // reiner Coverage-Lauf, kein Soll/Ist
+	if (!anyAssert) process.exit(jitterDiffs ? 1 : 0); // coverage-only run, nothing to assert
 
 	console.log(
-		`\nGESAMT  ${totPass} PASS  ${totFail} FAIL  ${totMiss} MISS  ` +
-			`(Quote ${((totPass / (totPass + totFail + totMiss)) * 100).toFixed(1)}%)`,
+		`\nTOTAL  ${totPass} PASS  ${totFail} FAIL  ${totMiss} MISS  ` +
+			`(rate ${((totPass / (totPass + totFail + totMiss)) * 100).toFixed(1)}%)`,
 	);
 
-	// --baseline: aktuelle PASS-Zahlen speichern. Sonst gegen Baseline diffen.
+	// --baseline: store the current PASS counts. Otherwise diff against the baseline.
 	if (flags.has("--baseline")) {
 		fs.writeFileSync(baselinePath, JSON.stringify(perPdf, null, 2));
-		console.log(`Baseline gespeichert -> ${baselinePath}`);
+		console.log(`Baseline saved -> ${baselinePath}`);
 	} else {
 		const prev = loadBaseline(baselinePath);
 		if (prev) {
@@ -299,14 +250,12 @@ function loadBaseline(p) {
 				if (d !== 0) deltas.push(`${d > 0 ? "+" : ""}${d} ${f}`);
 			}
 			console.log(
-				deltas.length
-					? `Δ vs Baseline: ${deltas.join(", ")}`
-					: "Δ vs Baseline: unverändert",
+				deltas.length ? `Δ vs baseline: ${deltas.join(", ")}` : "Δ vs baseline: unchanged",
 			);
 		}
 	}
 
-	// MISS zählt wie FAIL: ein Soll-Feld, das gar nicht mehr extrahiert wird, ist
-	// dieselbe Regression wie ein falscher Wert — sonst wäre das CI-Gate blind dafür.
+	// MISS counts like FAIL: an expected field that is no longer extracted is the same
+	// regression as a wrong value — otherwise the CI gate would be blind to it.
 	process.exit(totFail > 0 || totMiss > 0 || jitterDiffs > 0 ? 1 : 0);
 })();
