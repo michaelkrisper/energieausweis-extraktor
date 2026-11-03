@@ -1,0 +1,67 @@
+name: CI
+
+# Lint, unit tests, corpus validation (100 % + jitter) and a check that the committed
+# dist/index.html matches a fresh build. Also called by deploy-pages.yml before deploying.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      # package-lock.json is deliberately not committed -> npm install, not npm ci
+      - run: npm install
+      - run: pip install -r requirements-dev.txt
+      - name: Biome (JS lint + format)
+        run: npx biome ci .
+      - name: Ruff (Python lint + format)
+        run: |
+          ruff check .
+          ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - run: npm install
+      - name: Unit tests
+        run: npm test
+      # The corpus PDFs are third-party documents and not in the repo; fixtures carry
+      # their source URL and sha256 (test/fetch.js verifies both).
+      - uses: actions/cache@v6
+        with:
+          path: test/samples/*.pdf
+          key: corpus-${{ hashFiles('test/samples/*.expected.json') }}
+          restore-keys: corpus-
+      - run: node test/fetch.js
+      # Exit != 0 on any FAIL, MISS or jitter deviation (3 shifted re-reads per PDF).
+      - name: Validate engine against the reference corpus
+        run: node test/validate.js test/samples --jitter 2>/dev/null
+      - name: Build and check dist/index.html is up to date
+        run: |
+          python3 build.py
+          git diff --exit-code -- dist/index.html

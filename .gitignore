@@ -1,12 +1,13 @@
-# nichts ausschließen, das den Offline-Build betrifft:
-# vendor/*.js und dist/index.html werden BEWUSST committet (reproduzierbar + sofort nutzbar).
+# vendor/*.js and dist/index.html are committed ON PURPOSE (reproducible offline build,
+# usable without building).
 *.pyc
 __pycache__/
+.ruff_cache/
+.venv/
 .DS_Store
 *.xlsx
-# Dev-Test-Harness: nur Abhängigkeiten nicht committen.
-# Referenz-PDFs sind fremde Ausweise: committet werden nur die Fixtures (*.expected.json mit
-# _quelle-URL + _sha256), die PDFs lädt test/fetch.js nach test/samples/.
+# Corpus PDFs are third-party certificates: only the fixtures (*.expected.json with
+# _quelle URL + _sha256) are committed; test/fetch.js downloads the PDFs into test/samples/.
 test/samples/*.pdf
 node_modules/
 package-lock.json
