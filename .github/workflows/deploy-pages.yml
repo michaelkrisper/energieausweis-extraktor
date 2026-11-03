@@ -1,12 +1,12 @@
 name: Deploy to GitHub Pages
 
-# Testet die Engine gegen den Referenz-Korpus (100 % Pflicht), baut dist/index.html
-# aus Template + vendor und deployt sie bei jedem Push auf main. Auf Pull Requests
-# läuft nur das Test-Gate (kein Deploy), damit ein PR vor dem Merge rot wird.
+# Deploys dist/ to GitHub Pages, only after CI is green:
+# - after a successful CI run for a push to main (workflow_run), or
+# - on manual / dependabot-auto-merge dispatch, which runs CI first (workflow_call).
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -15,40 +15,35 @@ permissions:
   pages: write
   id-token: write
 
-# Nur ein Lauf je Branch/PR gleichzeitig; laufende abbrechen.
 concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  # Test-Gate: validate.js muss 100 % grün sein (Exit != 0 bei FAIL/MISS),
-  # sonst wird nicht deployt. Verhindert, dass eine kaputte Engine live geht.
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      # package-lock.json ist bewusst nicht committet (einzige Dev-Dependency:
-      # pdfjs-dist fürs Test-Harness) -> npm install statt npm ci, kein Cache
-      - run: npm install
-      # die Korpus-PDFs liegen nicht im Repo, nur ihre URLs (_quelle in den Fixtures)
-      - run: node test/fetch.js
-      # --jitter: jedes PDF zusätzlich 3x mit versetzter Seite / gemischter Item-
-      # Reihenfolge lesen; das Ergebnis muss identisch bleiben (Robustheits-Gate)
-      - name: Engine gegen Referenz-Korpus validieren (inkl. Jitter-Test)
-        run: node test/validate.js test/samples --jitter
+  ci:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ci.yml
 
   deploy:
-    needs: test
-    if: github.event_name != 'pull_request'
+    needs: ci
+    if: >-
+      !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && needs.ci.result == 'success') ||
+        (github.event_name == 'workflow_run' &&
+         github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'push')
+      )
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
       - name: Build dist/index.html
         run: python3 build.py
       - uses: actions/configure-pages@v6
