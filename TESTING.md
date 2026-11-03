@@ -1,95 +1,92 @@
-# Testen & Tunen
+# Testing
 
-Die ausgelieferte `dist/index.html` läuft im Browser über **pdf.js**. Damit Tuning dem echten
-Browser-Verhalten entspricht, prüft das Harness `test/validate.js` mit **demselben pdf.js** und
-**derselben `extract()`-Logik** wie das Template (es liest die Engine direkt aus
-`src/app.template.html`, kein dupliziertes Regelwerk → kein Drift).
+The shipped `dist/index.html` runs on pdf.js in the browser. The test harness uses the **same
+pdf.js** and the **same engine**: `test/engine.js` evaluates the engine block straight from
+`src/app.template.html` (from `const NUM_KEYS` up to `// ---- State`), so there is no duplicated
+rule set and no drift between browser and tests.
 
-## Einmal einrichten (nur Entwickler-Rechner, nicht der Firmen-PC)
-
-```bash
-npm install            # holt pdfjs-dist (nur Dev-Abhängigkeit)
-```
-
-## Echte Ausweise prüfen
+## Setup
 
 ```bash
-node test/validate.js test/samples            # mitgelieferter Referenz-Korpus (committet)
-node test/validate.js /pfad/zu/eigenen/pdfs   # beliebiger Ordner
+npm install            # pdfjs-dist (test harness) and Biome; nothing of this is shipped
+node test/fetch.js     # download the corpus PDFs into test/samples/ (gitignored)
 ```
 
-Zwei Modi, automatisch je PDF gewählt:
+The corpus PDFs are third-party certificates and are not committed. Each fixture carries the
+source URL (`_quelle`) and checksum (`_sha256`); `fetch.js` verifies the checksum. Fixtures whose
+source is no longer reachable are reported by `validate.js` as "Fixture without PDF" and can only
+be checked locally.
 
-- **Assert-Modus** (wenn `<pdf>.expected.json` existiert): vergleicht jedes extrahierte Feld gegen
-  den handgelesenen Soll-Wert. Ausgabe je PDF `✓/✗  n/m PASS` plus abweichende Felder als
-  `FAIL` (falscher Wert) / `MISS` (Soll vorhanden, nichts erkannt), am Ende eine Gesamt-Quote.
-  **Exit-Code ≠ 0**, sobald ein FAIL auftritt → echtes Pass/Fail fürs Tunen.
-- **Coverage-Modus** (ohne Fixture): nur Feld-Abdeckung + wichtigste Werte (HWB, fGEE, Ausgabe,
-  PLZ/Ort). Zeigt bei einem neuen Aussteller-Format sofort, was schon gelesen wird.
-
-Regressions messen:
+## Unit tests
 
 ```bash
-node test/validate.js test/samples --baseline   # aktuellen Stand als test/baseline.json sichern
-node test/validate.js test/samples              # nächster Lauf zeigt "Δ vs Baseline" je PDF
+npm test               # node --test "test/unit/*.test.js"
 ```
 
-Robustheit gegen Druckvarianten (metamorpher Jitter-Test, läuft auch in der CI):
+Synthetic inputs only (no third-party PDFs): number parsing, line grouping (tolerance, shift
+invariance, overprint removal), certificate detection, label extraction, class bounds,
+plausibility checks, mojibake and number-format repair, a hand-built PDF through `pdfToText`, and
+consistency checks (numeric keys are columns, the vendored pdf.js equals the tested version, the
+inline app script compiles).
+
+## Corpus validation
 
 ```bash
-node test/validate.js test/samples --jitter      # je PDF 3 zusätzliche Läufe mit versetzter Seite
-node test/validate.js test/samples --jitter=5    # (±0,5–1 in x/y), Item-x-Rauschen ±0,3 und gemischter
-                                                 # Item-Reihenfolge; jedes Feld muss gleich bleiben
+node test/validate.js test/samples 2>/dev/null           # reference corpus
+node test/validate.js /path/to/own/pdfs 2>/dev/null      # any folder
 ```
 
-Einzelnes PDF debuggen (layouttreuer pdf.js-Text, 1:1 wie die Engine ihn sieht):
+Two modes, chosen per PDF:
+
+- **Assert mode** (`<pdf>.expected.json` exists): compares every field against the hand-read
+  expected value. Output per PDF `✓/✗  n/m PASS`, deviations as `FAIL` (wrong value) or `MISS`
+  (expected value, nothing extracted), then a total. Exit code ≠ 0 on any FAIL or MISS.
+- **Coverage mode** (no fixture): field coverage and the main values only — useful as a first
+  look at a new layout.
+
+Regressions:
 
 ```bash
-node test/dump.js test/samples/<datei>.pdf 2>/dev/null
+node test/validate.js test/samples --baseline   # store PASS counts as test/baseline.json
+node test/validate.js test/samples              # later runs print "Δ vs baseline" per PDF
 ```
 
-### Soll-Fixture anlegen
-PDF von Hand lesen, echte Werte als `<pdf>.expected.json` daneben legen (Format: siehe vorhandene
-Fixtures in `test/samples/`). Nur Felder eintragen, die im PDF **tatsächlich** stehen — fehlt ein Wert,
-Key weglassen (dann gilt: Tool soll dort leer liefern). Zahlen normalisiert (Punkt statt Komma).
-`_`-Keys sind Metadaten und werden nicht geprüft.
+Robustness against print variations (metamorphic jitter test, part of CI):
 
-> pdf.js gibt auf der Konsole harmlose Font-Warnungen aus (`fetchStandardFontData …`,
-> `Cannot polyfill DOMMatrix`). Mit `2>/dev/null` ausblenden.
+```bash
+node test/validate.js test/samples --jitter      # 3 extra runs per PDF: page offset ±0.5–1 in x/y,
+node test/validate.js test/samples --jitter=5    # item x noise ±0.3, neighbour swaps in item order;
+                                                 # every field must stay identical
+```
 
-## Geprüfter Stand
+Debug a single PDF (layout text exactly as the engine sees it):
 
-Reproduzierbarer Referenz-Korpus in `test/samples/` (echte PDFs + handgelesene `*.expected.json`),
-**alle Felder grün** (`node test/validate.js test/samples` → 100 %, Exit 0). Abgedeckt:
+```bash
+node test/dump.js test/samples/<file>.pdf 2>/dev/null
+```
 
-| PDF | Ausgabe | Aussteller-SW | Typ |
-|-----|---------|---------------|-----|
-| vatter_2011_wg        | Okt 2011  | ETU Gebäudeprofi | WG (klassische Tabelle, LEK) |
-| sozialbau_wg          | 2023      | — (kompakt)      | WG |
-| hagger_muster_wg      | März 2015 | GEQ              | WG (EFH) |
-| eawz_2015plus_wg      | März 2015 | eawz Vorarlberg  | WG (eigene Layout-Familie) |
-| iu_2019_wg            | März 2015 | ArchiPHYSIK 13   | WG |
-| hafner_2019_efh       | März 2015 | GEQ              | WG (EFH, Planung) |
-| fiby_2015_nwg_hallenbad / _schule | März 2015 | GEQ (FIBY/AEE) | **Nicht-WG** |
-| krems_2015_nwg        | März 2015 | ECOTECH 3.3      | **Nicht-WG** (Büro) |
-| michaelauer_2024_efh  | April 2019| GEQ              | WG (EFH) |
-| kappl_2019_nwg        | April 2019| ETU Gebäudeprofi | **Nicht-WG** (Büro, Kühlfelder) |
-| sallingberg_2019_nwg  | April 2019| ECOTECH 3.3      | **Nicht-WG** (Extrembestand: HWB 615, fGEE 7,1) |
-| arwag_ifea_wg         | Mai 2023  | ArchiPHYSIK 25   | WG |
+pdf.js prints harmless font warnings to stderr (`standardFontDataUrl`, `Cannot polyfill
+DOMMatrix`); `2>/dev/null` hides them.
 
-Damit vier OIB-Ausgaben (2011/2015/2019/2023) und mehrere Layout-Familien:
-klassische Tabellen, GEQ-/ArchiPHYSIK-/ETU-/ECOTECH-Kennwertblöcke (getrennte RK/SK/Ref-Spalten),
-eawz-Vorarlberg — Wohn- und Nicht-Wohngebäude inkl. Kühl-/Betriebsstrom-Felder und Extremwerte
-(fGEE > 4). Gescannte PDFs ohne Textebene (z. B. ältere GEQ-2009-Muster) sind kein Testfall (keine OCR).
+## Writing a fixture
 
-Bewusste Grenzen: gescannte PDFs → `MANUELL` (keine OCR). RK/SK/Ref-Spalten nur, wenn der Ausweis
-sie ausweist. Bei exotischen Layouts lieber leer/`MANUELL` als falscher Wert → in der editierbaren
-Tabelle prüfen.
+Read the PDF by hand (or from `dump.js`, never from the extractor output) and store the real
+values as `<pdf>.expected.json` next to it, with `_quelle` (direct URL) and `_sha256`. Only add
+fields that are actually printed; a field printed empty ("---", "-", "k.A.") is asserted as `""`,
+an omitted key is not checked. Numbers in point notation, dates as `DD.MM.YYYY`. Keys starting
+with `_` are metadata and not checked. Field keys are the column keys in `COLUMNS` of the
+template (German domain terms of the OIB forms, e.g. `bezugsflaeche`, `seehoehe`).
 
-## Neues Format ergänzen
+## Adding a new certificate layout
 
-1. PDF nach `test/samples/` legen, `node test/dump.js <pdf>` ansehen, `node test/validate.js …` laufen.
-2. `<pdf>.expected.json` mit den echten Werten anlegen.
-3. Fehlt/falsch ein Feld → in `src/app.template.html` in `extract()` das passende `byLabel`/`byGerman`/
-   `byAbbrAdjacent`/`metric`/Regex anpassen (siehe README → „Erkennung anpassen").
-4. `python3 build.py` → `node test/validate.js test/samples` muss grün bleiben → committen.
+1. Add the fixture (see above), run `node test/fetch.js` and `node test/validate.js test/samples`.
+2. A field is missing or wrong → adjust the matching `byLabel` / `byGerman` / `byAbbrAdjacent` /
+   regex in `extract()` in `src/app.template.html`.
+3. `python3 build.py`, then validation (including `--jitter`) and `npm test` must stay green.
+
+New engine rules are derived from the corpus; whether they generalise only shows on unseen
+documents. Before taking new fixtures into the corpus, write them by hand without running the
+extractor on them first, measure the hit rate, and only then fix the gaps.
+
+By design, scanned PDFs (no text layer) are marked `MANUELL` (no OCR), and unclear layouts yield
+an empty cell rather than a wrong number.
