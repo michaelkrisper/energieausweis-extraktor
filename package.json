@@ -16,7 +16,7 @@
 		"validate": "node test/validate.js test/samples --jitter"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.6.4",
+		"@biomejs/biome": "2.6.5",
 		"pdfjs-dist": "6.5.438"
 	},
 	"comment": "dist/index.html ships with NO runtime dependencies; these are only for the dev/test harness."
