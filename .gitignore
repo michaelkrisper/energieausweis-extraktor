@@ -11,3 +11,4 @@ __pycache__/
 test/samples/*.pdf
 node_modules/
 package-lock.json
+CLAUDE.local.md
