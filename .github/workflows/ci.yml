@@ -1,13 +1,14 @@
 name: CI
 
 # Lint, unit tests, corpus validation (100 % + jitter) and a check that the committed
-# dist/index.html matches a fresh build. Also called by deploy-pages.yml before deploying.
+# dist/index.html matches a fresh build. On main, each tested commit gets the next patch
+# version tag and is deployed to GitHub Pages.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -65,3 +66,54 @@ jobs:
         run: |
           python3 build.py
           git diff --exit-code -- dist/index.html
+
+  # Tags every tested commit on main with the next patch version (vX.Y.Z).
+  version:
+    name: Version tag
+    needs: [lint, test]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: version-tag
+      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: tag
+        run: python3 .github/scripts/release.py tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  deploy:
+    # Only commits that got a version tag: a re-run of an older run deploys nothing.
+    needs: [lint, test, version]
+    if: needs.version.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - name: Build dist/index.html
+        run: python3 build.py
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v5

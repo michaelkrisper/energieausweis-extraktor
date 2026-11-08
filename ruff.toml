@@ -3,3 +3,7 @@ target-version = "py312"
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "EXE"]
+
+[format]
+# .github/scripts/release.py is formatted at the ruff default of 88 columns; leave it as is.
+exclude = [".github/scripts/release.py"]
