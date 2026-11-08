@@ -5,7 +5,7 @@ guideline RL 6) as PDFs from a folder tree, extracts their key figures and expor
 normalised Excel sheet.
 
 [![CI](https://github.com/michaelkrisper/energieausweis-extraktor/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelkrisper/energieausweis-extraktor/actions/workflows/ci.yml)
-[![Deploy](https://github.com/michaelkrisper/energieausweis-extraktor/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/michaelkrisper/energieausweis-extraktor/actions/workflows/deploy-pages.yml)
+[![Version](https://img.shields.io/github/v/tag/michaelkrisper/energieausweis-extraktor?sort=semver&label=version)](https://github.com/michaelkrisper/energieausweis-extraktor/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933.svg)](.nvmrc)
 [![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f.svg)](https://michaelkrisper.github.io/energieausweis-extraktor/)
@@ -109,7 +109,9 @@ with shifted pages, x noise and swapped item order) must yield identical results
 
 CI ([`ci.yml`](.github/workflows/ci.yml)) runs lint, unit tests, the corpus validation and the
 build check on every push and pull request to `main`; GitHub Pages is deployed only after CI
-passes.
+passes. Every merge to `main` is tagged with the next patch version; bundled releases with
+release notes come from the Release workflow. Changes go through issues and pull requests, see
+[CONTRIBUTING](CONTRIBUTING.md).
 
 ## License
 
