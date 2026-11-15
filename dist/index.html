@@ -149,6 +149,8 @@
   .toast.warn{border-left-color:var(--warn)}
   .toast.out{opacity:0;transform:translateX(10px);transition:all .35s}
   @keyframes slidein{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+  footer{padding:0 24px 18px;text-align:center;font-size:12px;color:var(--muted)}
+  footer a{color:inherit}
 </style>
 </head>
 <body>
@@ -218,6 +220,12 @@
     </table>
   </section>
 </main>
+<footer>
+  <a href="https://krisperapps.de/impressum" target="_blank" rel="noopener">Impressum</a> ·
+  <a href="https://krisperapps.de/datenschutz#energieausweis" target="_blank" rel="noopener">Datenschutz</a> ·
+  <a href="https://krisperapps.de/nutzung" target="_blank" rel="noopener">Nutzung</a> ·
+  <span id="version">dev</span>
+</footer>
 <div id="toasts"></div>
 
 <!-- ===== embedded libraries (offline, no CDN) ===== -->

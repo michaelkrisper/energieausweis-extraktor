@@ -8,9 +8,9 @@ normalised Excel sheet.
 [![Version](https://img.shields.io/github/v/tag/michaelkrisper/energieausweis-extraktor?sort=semver&label=version)](https://github.com/michaelkrisper/energieausweis-extraktor/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933.svg)](.nvmrc)
-[![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f.svg)](https://michaelkrisper.github.io/energieausweis-extraktor/)
+[![Live demo](https://img.shields.io/badge/demo-krisperapps.de-2ea44f.svg)](https://energieausweis.krisperapps.de/)
 
-**Live demo: <https://michaelkrisper.github.io/energieausweis-extraktor/>**
+**Live demo: <https://energieausweis.krisperapps.de/>**
 
 Everything runs locally in the browser: no server, no upload, no installation. The page is a
 single self-contained HTML file and keeps working offline. The user interface is in German, the
@@ -33,7 +33,7 @@ language of the documents it processes.
 
 ## Usage
 
-Open the [live demo](https://michaelkrisper.github.io/energieausweis-extraktor/), or download
+Open the [live demo](https://energieausweis.krisperapps.de/), or download
 [`dist/index.html`](dist/index.html) and open it with a double click.
 
 1. Click **„Ordner wählen"** (choose folder) or drop folders / PDFs onto the window. The toggle
@@ -108,9 +108,10 @@ with shifted pages, x noise and swapped item order) must yield identical results
 [TESTING.md](TESTING.md) for the test harness and how to add a new certificate layout.
 
 CI ([`ci.yml`](.github/workflows/ci.yml)) runs lint, unit tests, the corpus validation and the
-build check on every push and pull request to `main`; GitHub Pages is deployed only after CI
-passes. Every merge to `main` is tagged with the next patch version; bundled releases with
-release notes come from the Release workflow. Changes go through issues and pull requests, see
+build check on every push and pull request to `main`. Every merge to `main` is tagged with the
+next patch version and then uploaded to the live address, stamped with that version (shown at
+the bottom of the page; the committed build says `dev`). Bundled releases with release notes
+come from the Release workflow. Changes go through issues and pull requests, see
 [CONTRIBUTING](CONTRIBUTING.md).
 
 ## License

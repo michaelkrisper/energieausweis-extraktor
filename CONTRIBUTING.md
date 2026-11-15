@@ -16,7 +16,9 @@
 
 - Versions follow [Semantic Versioning](https://semver.org) and exist only as
   git tags (`vMAJOR.MINOR.PATCH`).
-- CI tags every merge to `main` with the next patch version.
+- CI tags every merge to `main` with the next patch version and deploys it to
+  <https://energieausweis.krisperapps.de/>. The page shows that version at the bottom;
+  the committed `dist/index.html` says `dev`.
 - A release bundles the changes since the previous one: run
   _Actions → Release → Run workflow_ and pick `minor` or `major`. It tags
   `main` and publishes a GitHub release listing the merged pull requests and
