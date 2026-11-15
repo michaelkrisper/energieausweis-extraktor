@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Inline vendor/*.js into src/app.template.html -> dist/index.html (one portable offline file)."""
 
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -20,7 +21,10 @@ def build() -> Path:
             raise SystemExit(f"ERROR: {f} contains </script> and cannot be inlined")
     # pdf.js 6 and its worker are ES modules -> embedded as text/plain; the template turns them
     # into Blob URLs at runtime and loads them via import() (a classic <script> cannot run ESM).
+    # Versions exist only as git tags: the deploy passes the tag as VERSION, the committed
+    # build shows "dev".
     blocks = {
+        "<!--__VERSION__-->": os.environ.get("VERSION") or "dev",
         "<!--__PDFJS__-->": '<script type="text/plain" id="pdfmodule">\n'
         + code["pdf.min.mjs"]
         + "\n</script>",

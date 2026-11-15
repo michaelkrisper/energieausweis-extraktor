@@ -8,7 +8,7 @@ Offline single-file browser tool: reads Austrian energy performance certificates
 (_Energieausweis_, OIB RL 6) as PDFs from a folder tree, extracts their key figures
 heuristically and exports one normalised Excel sheet. No server, no upload:
 `dist/index.html` is self-contained (pdf.js and SheetJS inlined) and is deployed to
-GitHub Pages by CI. UI, status texts and field keys are German (the language of the
+https://energieausweis.krisperapps.de/ (own server, static files) by CI. UI, status texts and field keys are German (the language of the
 documents); code comments, docs and tests are English.
 
 ## Commands
@@ -31,16 +31,18 @@ node test/dump.js test/samples/<file>.pdf 2>/dev/null      # layout text exactly
 - `2>/dev/null` only hides harmless pdf.js font warnings.
 - CI (`.github/workflows/ci.yml`): lint, unit tests, fetch + validate `--jitter`, and
   `python3 build.py && git diff --exit-code -- dist/index.html`; on `main` then the
-  version tag and the Pages deploy. Biome covers `test/**/*.js` and root JSON only, not
-  the template or markdown.
+  version tag and the "krisperapps.de" job (`VERSION=<tag> python3 build.py`, rsync of
+  `dist/`, smoke test; skipped without the secret `DEPLOY_SSH_KEY`). Biome covers
+  `test/**/*.js` and root JSON only, not the template or markdown.
 - Harness details and the "new layout" recipe: TESTING.md.
 
 ## Architecture
 
 - `src/app.template.html` -- the whole app, UI and extraction engine. Source of truth.
 - `dist/index.html` -- generated: `build.py` replaces placeholder comments
-  (`<!--__PDFJS__-->` etc.) with the `vendor/` files. Never edit it; rebuild and commit
-  it with every template change, CI fails on a stale build.
+  (`<!--__PDFJS__-->` etc.) with the `vendor/` files and `<!--__VERSION__-->` in the
+  footer with `$VERSION` (default `dev`, which is what gets committed). Never edit it;
+  rebuild and commit it with every template change, CI fails on a stale build.
 - `vendor/` -- pdf.js (ES module + worker, embedded as `type="text/plain"` blocks that
   become Blob URLs at runtime) and SheetJS, committed for an offline, reproducible
   build. A unit test requires the vendored pdf.js to equal the pinned `pdfjs-dist`
@@ -118,5 +120,5 @@ node test/dump.js test/samples/<file>.pdf 2>/dev/null      # layout text exactly
 - PRs auto-merge (squash) once CI and the "Linked ticket" check pass; drafts are not merged.
 - Versions exist only as git tags `vX.Y.Z`. Every merge to `main` tags the next patch;
   never edit version numbers in files. Minor/major releases: Actions -> Release.
-- Merging to `main` deploys `dist/` to GitHub Pages automatically.
+- Merging to `main` deploys `dist/` to https://energieausweis.krisperapps.de/ automatically.
 - Details: CONTRIBUTING.md.

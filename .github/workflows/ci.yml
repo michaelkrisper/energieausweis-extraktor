@@ -2,7 +2,7 @@ name: CI
 
 # Lint, unit tests, corpus validation (100 % + jitter) and a check that the committed
 # dist/index.html matches a fresh build. On main, each tested commit gets the next patch
-# version tag and is deployed to GitHub Pages.
+# version tag and is deployed to https://energieausweis.krisperapps.de/.
 on:
   push:
     branches: [main]
@@ -89,31 +89,62 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  # Publishes dist/ to the own server. The key may only write into this app's folder
+  # there, so this job runs nothing but checkout, build, rsync and the smoke test.
   deploy:
+    name: krisperapps.de
     # Only commits that got a version tag: a re-run of an older run deploys nothing.
     needs: [lint, test, version]
     if: needs.version.outputs.version != ''
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
     concurrency:
-      group: pages
+      group: server
       cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      LIVE: https://energieausweis.krisperapps.de/
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
+      # The page shows the release tag; the committed build says "dev".
       - name: Build dist/index.html
-        run: python3 build.py
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-      - id: deployment
-        uses: actions/deploy-pages@v5
+        run: |
+          python3 build.py
+          grep -q "id=\"version\">$VERSION<" dist/index.html
+      # Without the key (not set yet, or a fork) nothing is uploaded or tested.
+      - id: key
+        name: Check for the deploy key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -n "$DEPLOY_SSH_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret DEPLOY_SSH_KEY is not set: $VERSION was not deployed."
+          fi
+      - name: Upload
+        if: steps.key.outputs.present == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          echo 'krisperapps.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMchrlhQI1OFJ2cEfQosiydiSPg498c/+Mggebk+zVLO' > ~/.ssh/known_hosts
+          rsync -rtz --delete -e 'ssh -i ~/.ssh/deploy' dist/ deploy@krisperapps.de:./
+      # The address must answer 200 with exactly the file that was just built.
+      - name: Smoke test
+        if: steps.key.outputs.present == 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            code="$(curl -s -o live.html -w '%{http_code}' --max-time 30 "$LIVE" || true)"
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          echo "$LIVE -> $code"
+          [ "$code" = 200 ] || { echo "::error::$LIVE returned $code"; exit 1; }
+          grep -q '<title>Energieausweis-Extraktor</title>' live.html || { echo "::error::$LIVE is not the app"; exit 1; }
+          grep -q "id=\"version\">$VERSION<" live.html || { echo "::error::$LIVE does not show $VERSION"; exit 1; }
+          cmp live.html dist/index.html || { echo "::error::$LIVE differs from the build"; exit 1; }
